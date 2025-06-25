@@ -8,3 +8,9 @@ func _enter_tree():
 func _exit_tree():
 	remove_autoload_singleton("WavedashSDK")
 	print("Wavedash: Plugin unloaded")
+
+func _get_plugin_name():
+	return "WavedashSDK"
+
+func _get_plugin_icon():
+	return EditorInterface.get_editor_theme().get_icon("Node", "EditorIcons")
