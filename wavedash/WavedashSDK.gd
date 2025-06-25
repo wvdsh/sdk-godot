@@ -29,7 +29,7 @@ func _ready():
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
 		var engine = JavaScriptBridge.create_object("Object")
 		engine["type"] = "Godot"
-		engine["sendMessage"] = _js_callback_receiver
+		engine["SendMessage"] = _js_callback_receiver
 		WavedashJS.setEngineInstance(engine)
 
 func init(config: Dictionary):
@@ -73,7 +73,7 @@ func _dispatch_js_event(args):
 	var method_name = args[1]
 	var payload = args[2]
 	match method_name:
-		"OnLobbyMessage":
+		"LobbyMessage":
 			var data = JSON.parse_string(payload)
 			lobby_message.emit(data)
 		_:
