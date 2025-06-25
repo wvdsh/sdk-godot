@@ -50,7 +50,7 @@ func join_lobby(lobby_id: String):
 func sendLobbyChatMsg(lobby_id: String, message: String):
 	if OS.get_name() == "Web" and WavedashJS:
 		# Fire and forget
-		WavedashJS.sendLobbyChatMsg(lobby_id, message)
+		WavedashJS.sendLobbyMessage(lobby_id, message)
 		return true
 	return false
 
