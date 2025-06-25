@@ -1,0 +1,1 @@
+Godot Engine plugin that allows Godot Web Build games to use Wavedash Online Services.
