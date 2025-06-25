@@ -67,8 +67,6 @@ func _on_lobby_created_gd(args):
 
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
-	print("[GODOT] Received JS Event", args)
-	print("[GODOT] ", args[0])
 	var game_object_name = args[0]  # Unused in Godot. Needed for Unity
 	var method_name = args[1]
 	var payload = args[2]
