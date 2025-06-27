@@ -40,6 +40,10 @@ func get_user():
 	if OS.get_name() == "Web" and WavedashJS:
 		return JSON.parse_string(WavedashJS.getUser())
 	return null
+	
+func create_lobby():
+	if OS.get_name() == "Web" and WavedashJS:
+		WavedashJS.createLobby().then(_on_lobby_created_js)
 
 func join_lobby(lobby_id: String):
 	if OS.get_name() == "Web" and WavedashJS:
@@ -61,9 +65,8 @@ func _on_lobby_joined_gd(args):
 	lobby_joined.emit(lobby_data)
 
 func _on_lobby_created_gd(args):
-	var lobby_json = args[0] if args.size() > 0 else null
-	var lobby_data = JSON.parse_string(lobby_json) if lobby_json else {}
-	lobby_created.emit(lobby_data)
+	var lobby_id = args[0]
+	lobby_created.emit(lobby_id)
 
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
