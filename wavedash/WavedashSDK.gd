@@ -1,5 +1,7 @@
 extends Node
 
+const Constants = preload("res://addons/wavedash/WavedashConstants.gd")
+
 # We expect window.WavedashJS to be available on the page
 var WavedashJS:JavaScriptObject
 
@@ -19,7 +21,7 @@ signal lobby_message(payload)
 signal lobby_left(payload)
 
 func _ready():
-	if OS.get_name() == "Web":
+	if OS.get_name() == Constants.PLATFORM_WEB:
 		WavedashJS = JavaScriptBridge.get_interface("WavedashJS")
 		if not WavedashJS:
 			print("WavedashSDK: WavedashJS not found on window")
@@ -33,26 +35,26 @@ func _ready():
 		WavedashJS.setEngineInstance(engine)
 
 func init(config: Dictionary):
-	if OS.get_name() == "Web" and WavedashJS:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.init(JSON.stringify(config))
 
 func get_user():
-	if OS.get_name() == "Web" and WavedashJS:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		return JSON.parse_string(WavedashJS.getUser())
 	return null
 	
-func create_lobby():
-	if OS.get_name() == "Web" and WavedashJS:
-		WavedashJS.createLobby().then(_on_lobby_created_js)
+func create_lobby(lobby_type: String, max_players = null):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.createLobby(lobby_type, max_players).then(_on_lobby_created_js)
 
 func join_lobby(lobby_id: String):
-	if OS.get_name() == "Web" and WavedashJS:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.joinLobby(lobby_id).then(_on_lobby_joined_js)
 		return true
 	return false
 
 func sendLobbyChatMsg(lobby_id: String, message: String):
-	if OS.get_name() == "Web" and WavedashJS:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		# Fire and forget
 		WavedashJS.sendLobbyMessage(lobby_id, message)
 		return true
@@ -74,7 +76,7 @@ func _dispatch_js_event(args):
 	var method_name = args[1]
 	var payload = args[2]
 	match method_name:
-		"LobbyMessage":
+		Constants.EVENT_LOBBY_MESSAGE:
 			var data = JSON.parse_string(payload)
 			lobby_message.emit(data)
 		_:
