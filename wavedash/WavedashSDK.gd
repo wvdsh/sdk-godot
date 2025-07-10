@@ -1,6 +1,6 @@
 extends Node
 
-const Constants = preload("res://addons/wavedash/WavedashConstants.gd")
+const Constants = preload("WavedashConstants.gd")
 
 # We expect window.WavedashJS to be available on the page
 var WavedashJS:JavaScriptObject
@@ -72,7 +72,7 @@ func _on_lobby_created_gd(args):
 
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
-	var game_object_name = args[0]  # Unused in Godot. Needed for Unity
+	var _game_object_name = args[0]  # Unused in Godot. Needed for Unity
 	var method_name = args[1]
 	var payload = args[2]
 	match method_name:
