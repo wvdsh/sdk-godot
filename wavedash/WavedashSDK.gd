@@ -3,16 +3,20 @@ extends Node
 const Constants = preload("WavedashConstants.gd")
 
 # We expect window.WavedashJS to be available on the page
-var WavedashJS:JavaScriptObject
+var WavedashJS : JavaScriptObject
+
+# Cache what we can so the next call doesn't have to wait for JS
+var user_id : int = 0
+var username : String = ""
 
 # Handle events broadcasted from JS to Godot
 # JS -> GD
-var _js_callback_receiver:JavaScriptObject
+var _js_callback_receiver : JavaScriptObject
 
 # Handle results when Godot calls async JS functions
 # GD -> JS (async) -> GD
-var _on_lobby_joined_js:JavaScriptObject
-var _on_lobby_created_js:JavaScriptObject
+var _on_lobby_joined_js : JavaScriptObject
+var _on_lobby_created_js : JavaScriptObject
 
 # Signals that Godot developers can connect to
 signal lobby_joined(payload)
@@ -38,11 +42,29 @@ func init(config: Dictionary):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.init(JSON.stringify(config))
 
-func get_user():
+func get_user_id() -> int:
+	if user_id != 0:
+		return user_id
+		
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		return JSON.parse_string(WavedashJS.getUser())
-	return null
+		var user_data = JSON.parse_string(WavedashJS.getUser())
+		user_id = user_data["id"]
+		username = user_data["username"]
+		return user_id
 	
+	return 0
+	
+func get_username() -> String:
+	if username != "":
+		return username
+		
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		var user_data = JSON.parse_string(WavedashJS.getUser())
+		username = user_data["username"]
+		return username
+	
+	return ""
+
 func create_lobby(lobby_type: String, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.createLobby(lobby_type, max_players).then(_on_lobby_created_js)

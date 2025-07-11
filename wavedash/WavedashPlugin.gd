@@ -2,7 +2,8 @@
 extends EditorPlugin
 
 func _enter_tree():
-	add_autoload_singleton("WavedashSDK", "res://addons/wavedash/WavedashSDK.gd")
+	var plugin_path = get_script().resource_path.get_base_dir()
+	add_autoload_singleton("WavedashSDK", plugin_path + "/WavedashSDK.gd")
 	print("Wavedash: Plugin loaded")
 
 func _exit_tree():
