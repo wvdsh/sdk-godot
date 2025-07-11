@@ -8,6 +8,9 @@ var WavedashJS : JavaScriptObject
 # Cache what we can so the next call doesn't have to wait for JS
 var user_id : int = 0
 var username : String = ""
+# Leaderboard name -> leaderboard data (id, num_entries)
+var leaderboard_cache : Dictionary = {}
+var leaderboard_handles : Dictionary = {}
 
 # Handle events broadcasted from JS to Godot
 # JS -> GD
@@ -17,12 +20,14 @@ var _js_callback_receiver : JavaScriptObject
 # GD -> JS (async) -> GD
 var _on_lobby_joined_js : JavaScriptObject
 var _on_lobby_created_js : JavaScriptObject
+var _on_get_leaderboard_result_js : JavaScriptObject
 
 # Signals that Godot developers can connect to
 signal lobby_joined(payload)
 signal lobby_created(payload)
 signal lobby_message(payload)
 signal lobby_left(payload)
+signal get_leaderboard_result(payload)
 
 func _ready():
 	if OS.get_name() == Constants.PLATFORM_WEB:
@@ -32,6 +37,7 @@ func _ready():
 			return
 		_on_lobby_joined_js = JavaScriptBridge.create_callback(_on_lobby_joined_gd)
 		_on_lobby_created_js = JavaScriptBridge.create_callback(_on_lobby_created_gd)
+		_on_get_leaderboard_result_js = JavaScriptBridge.create_callback(_on_get_leaderboard_result_gd)
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
 		var engine = JavaScriptBridge.create_object("Object")
 		engine["type"] = "Godot"
@@ -65,6 +71,14 @@ func get_username() -> String:
 	
 	return ""
 
+func get_leaderboard(leaderboard_name: String):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.getLeaderboard(leaderboard_name).then(_on_get_leaderboard_result_js)
+
+func get_or_create_leaderboard(leaderboard_name: String, sort_method: int, display_type: int):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.getOrCreateLeaderboard(leaderboard_name, sort_method, display_type).then(_on_get_leaderboard_result_js)
+
 func create_lobby(lobby_type: String, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.createLobby(lobby_type, max_players).then(_on_lobby_created_js)
@@ -91,6 +105,17 @@ func _on_lobby_joined_gd(args):
 func _on_lobby_created_gd(args):
 	var lobby_id = args[0]
 	lobby_created.emit(lobby_id)
+
+func _on_get_leaderboard_result_gd(args):
+	var leaderboard_json = args[0] if args.size() > 0 else null
+	var leaderboard_data = JSON.parse_string(leaderboard_json) if leaderboard_json else {}
+	if leaderboard_data.has("id"):
+		leaderboard_cache[leaderboard_data["name"]] = leaderboard_data
+		leaderboard_handles[leaderboard_data["name"]] = leaderboard_data["id"]
+		leaderboard_data["success"] = true
+		get_leaderboard_result.emit(leaderboard_data)
+	else:
+		get_leaderboard_result.emit({"success":false, "name":leaderboard_data["name"]})
 
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
