@@ -21,6 +21,7 @@ var _js_callback_receiver : JavaScriptObject
 var _on_lobby_joined_js : JavaScriptObject
 var _on_lobby_created_js : JavaScriptObject
 var _on_get_leaderboard_result_js : JavaScriptObject
+var _on_post_leaderboard_score_result_js : JavaScriptObject
 
 # Signals that Godot developers can connect to
 signal lobby_joined(payload)
@@ -28,6 +29,7 @@ signal lobby_created(payload)
 signal lobby_message(payload)
 signal lobby_left(payload)
 signal get_leaderboard_result(payload)
+signal post_leaderboard_score_result(payload)
 
 func _ready():
 	if OS.get_name() == Constants.PLATFORM_WEB:
@@ -38,6 +40,7 @@ func _ready():
 		_on_lobby_joined_js = JavaScriptBridge.create_callback(_on_lobby_joined_gd)
 		_on_lobby_created_js = JavaScriptBridge.create_callback(_on_lobby_created_gd)
 		_on_get_leaderboard_result_js = JavaScriptBridge.create_callback(_on_get_leaderboard_result_gd)
+		_on_post_leaderboard_score_result_js = JavaScriptBridge.create_callback(_on_post_leaderboard_score_result_gd)
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
 		var engine = JavaScriptBridge.create_object("Object")
 		engine["type"] = "Godot"
@@ -79,6 +82,10 @@ func get_or_create_leaderboard(leaderboard_name: String, sort_method: int, displ
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.getOrCreateLeaderboard(leaderboard_name, sort_method, display_type).then(_on_get_leaderboard_result_js)
 
+func post_leaderboard_score(leaderboard_id: String, keep_best: bool, score: int, metadata: PackedByteArray):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.postLeaderboardScore(leaderboard_id, keep_best, score, metadata).then(_on_post_leaderboard_score_result_js)
+
 func create_lobby(lobby_type: String, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.createLobby(lobby_type, max_players).then(_on_lobby_created_js)
@@ -116,6 +123,14 @@ func _on_get_leaderboard_result_gd(args):
 		get_leaderboard_result.emit(leaderboard_data)
 	else:
 		get_leaderboard_result.emit({"success":false, "name":leaderboard_data["name"]})
+
+func _on_post_leaderboard_score_result_gd(args):
+	var leaderboard_json = args[0] if args.size() > 0 else null
+	var leaderboard_data = JSON.parse_string(leaderboard_json) if leaderboard_json else {}
+	if leaderboard_data.has("success"):
+		post_leaderboard_score_result.emit(leaderboard_data)
+	else:
+		post_leaderboard_score_result.emit({"success":false, "name":leaderboard_data["name"]})
 
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
