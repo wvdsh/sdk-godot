@@ -138,7 +138,7 @@ func _dispatch_js_event(args):
 	var method_name = args[1]
 	var payload = args[2]
 	match method_name:
-		Constants.EVENT_LOBBY_MESSAGE:
+		Constants.JS_EVENT_LOBBY_MESSAGE:
 			var data = JSON.parse_string(payload)
 			lobby_message.emit(data)
 		_:
