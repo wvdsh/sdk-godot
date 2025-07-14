@@ -1,32 +1,40 @@
 class_name WavedashConstants
 
 # Lobby Types
-const LOBBY_TYPE_PUBLIC = "PUBLIC"
-const LOBBY_TYPE_FRIENDS_ONLY = "FRIENDS_ONLY"
-const LOBBY_TYPE_PRIVATE = "PRIVATE"
+const LOBBY_TYPE_PUBLIC = 0
+const LOBBY_TYPE_FRIENDS_ONLY = 1
+const LOBBY_TYPE_PRIVATE = 2
 
-# Lobby States
-const LOBBY_STATE_WAITING = "waiting"
-const LOBBY_STATE_IN_GAME = "in_game"
-const LOBBY_STATE_FINISHED = "finished"
-
-# Message Types
-const MESSAGE_TYPE_CHAT = "chat"
-const MESSAGE_TYPE_SYSTEM = "system"
-
-# Event Types
-const EVENT_LOBBY_JOINED = "LobbyJoined"
-const EVENT_LOBBY_CREATED = "LobbyCreated"
-const EVENT_LOBBY_LEFT = "LobbyLeft"
-const EVENT_LOBBY_MESSAGE = "LobbyMessage"
+# Broadcast Event Types
+const JS_EVENT_LOBBY_MESSAGE = "LobbyMessage"
 
 # Platform Types
 const PLATFORM_WEB = "Web"
-const PLATFORM_WINDOWS = "Windows"
-const PLATFORM_MACOS = "macOS"
-const PLATFORM_LINUX = "Linux"
 
-# Error Codes
-const ERROR_JS_NOT_FOUND = "WAVEDASH_JS_NOT_FOUND"
-const ERROR_NOT_WEB_PLATFORM = "NOT_WEB_PLATFORM"
-const ERROR_INVALID_LOBBY_ID = "INVALID_LOBBY_ID"
+# Leaderboard Sort Methods
+const LEADERBOARD_SORT_ASCENDING = 0
+const LEADERBOARD_SORT_DESCENDING = 1
+
+# Leaderboard Display Types
+const LEADERBOARD_DISPLAY_TYPE_NUMERIC = 0
+const LEADERBOARD_DISPLAY_TYPE_TIME_SECONDS = 1
+const LEADERBOARD_DISPLAY_TYPE_TIME_MILLISECONDS = 2
+
+# UGC Item Types
+const UGC_ITEM_TYPE_SCREENSHOT = 0
+const UGC_ITEM_TYPE_VIDEO = 1
+const UGC_ITEM_TYPE_COMMUNITY = 2
+const UGC_ITEM_TYPE_GAME_MANAGED = 3
+const UGC_ITEM_TYPE_OTHER = 4
+
+# API Call Result Codes (HTTP Status Codes)
+const RESULT_OK = 200
+const RESULT_ERROR = 400
+const RESULT_NOT_FOUND = 404
+const RESULT_UNAUTHORIZED = 401
+const RESULT_FORBIDDEN = 403
+const RESULT_INTERNAL_SERVER_ERROR = 500
+const RESULT_BAD_REQUEST = 400
+const RESULT_UNPROCESSABLE_ENTITY = 422
+const RESULT_TOO_MANY_REQUESTS = 429
+const RESULT_SERVICE_UNAVAILABLE = 503
