@@ -1,9 +1,8 @@
+# Since this is an autoload, it's already a singleton
+# Access it directly via the global WavedashSDK variable
 extends Node
 
 const Constants = preload("WavedashConstants.gd")
-
-# Static instance for singleton-like access
-static var _instance : Node = null
 
 # We expect window.WavedashJS to be available on the page
 var WavedashJS : JavaScriptObject
@@ -11,6 +10,7 @@ var WavedashJS : JavaScriptObject
 # Cache what we can so the next call doesn't have to wait for JS
 var user_id : int = 0
 var username : String = ""
+var isReady: bool = false
 # Leaderboard name -> leaderboard data (id, num_entries)
 var leaderboard_cache : Dictionary = {}
 var leaderboard_handles : Dictionary = {}
@@ -35,11 +35,8 @@ signal get_leaderboard_result(payload)
 signal post_leaderboard_score_result(payload)
 
 func _enter_tree():
-	# Set instance as early as possible
-	_instance = self
-
-func _ready():
-	print("WavedashSDK._ready() called, platform: ", OS.get_name())
+	print("WavedashSDK._enter_tree() called, platform: ", OS.get_name())
+	isReady = true
 	if OS.get_name() == Constants.PLATFORM_WEB:
 		WavedashJS = JavaScriptBridge.get_interface("WavedashJS")
 		if not WavedashJS:
@@ -56,6 +53,8 @@ func _ready():
 		WavedashJS.setEngineInstance(engine)
 
 func init(config: Dictionary):
+	print("WavedashSDK: init() called")
+	assert(isReady, "WavedashSDK.init() called before WavedashSDK was added to the tree")
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		print("WavedashSDK: Initializing with config: ", config)
 		WavedashJS.init(JSON.stringify(config))
@@ -152,29 +151,3 @@ func _dispatch_js_event(args):
 			lobby_message.emit(data)
 		_:
 			push_warning("[WavedashSDK] Received unknown event from JS: " + method_name)
-
-# Static method to get the singleton instance
-# TODO: Is this the best way to do this?
-static func get_singleton() -> Node:
-	# If instance isn't set yet, try to find it in the scene tree
-	# This handles the case where we're called before _ready()
-	if not _instance:
-		var root = Engine.get_main_loop().root if Engine.get_main_loop() else null
-		if root and root.has_node("/root/WavedashSDK"):
-			_instance = root.get_node("/root/WavedashSDK")
-	return _instance
-
-# Static method to check if singleton exists
-# TODO: Is this the best way to do this?
-static func has_singleton() -> bool:
-	# First check if we have a cached instance
-	if _instance != null:
-		return true
-	# Otherwise, check if it exists in the scene tree
-	var root = Engine.get_main_loop().root if Engine.get_main_loop() else null
-	return root != null and root.has_node("/root/WavedashSDK")
-
-func _exit_tree():
-	# Clear the static instance when node is freed
-	if _instance == self:
-		_instance = null
