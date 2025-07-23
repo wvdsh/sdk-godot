@@ -3,12 +3,11 @@ extends EditorPlugin
 
 func _enter_tree():
 	var plugin_path = get_script().resource_path.get_base_dir()
-	add_autoload_singleton("WavedashSDK", plugin_path + "/WavedashSDK.gd")
-	print("Wavedash: Plugin loaded")
+	var sdk_path = plugin_path + "/WavedashSDK.gd"
+	add_autoload_singleton("WavedashSDK", sdk_path)
 
 func _exit_tree():
 	remove_autoload_singleton("WavedashSDK")
-	print("Wavedash: Plugin unloaded")
 
 func _get_plugin_name():
 	return "WavedashSDK"

@@ -2,6 +2,9 @@ extends Node
 
 const Constants = preload("WavedashConstants.gd")
 
+# Static instance for singleton-like access
+static var _instance : Node = null
+
 # We expect window.WavedashJS to be available on the page
 var WavedashJS : JavaScriptObject
 
@@ -32,6 +35,9 @@ signal get_leaderboard_result(payload)
 signal post_leaderboard_score_result(payload)
 
 func _ready():
+	# Register this instance as the singleton
+	_instance = self
+	print("WavedashSDK._ready() called, platform: ", OS.get_name())
 	if OS.get_name() == Constants.PLATFORM_WEB:
 		WavedashJS = JavaScriptBridge.get_interface("WavedashJS")
 		if not WavedashJS:
@@ -49,6 +55,7 @@ func _ready():
 
 func init(config: Dictionary):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		print("WavedashSDK: Initializing with config: ", config)
 		WavedashJS.init(JSON.stringify(config))
 
 func get_user_id() -> int:
@@ -86,7 +93,7 @@ func post_leaderboard_score(leaderboard_id: String, keep_best: bool, score: int,
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.postLeaderboardScore(leaderboard_id, keep_best, score, metadata).then(_on_post_leaderboard_score_result_js)
 
-func create_lobby(lobby_type: String, max_players = null):
+func create_lobby(lobby_type: int, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.createLobby(lobby_type, max_players).then(_on_lobby_created_js)
 
@@ -143,3 +150,16 @@ func _dispatch_js_event(args):
 			lobby_message.emit(data)
 		_:
 			push_warning("[WavedashSDK] Received unknown event from JS: " + method_name)
+
+# Static method to get the singleton instance
+func get_singleton() -> Node:
+	return _instance
+
+# Static method to check if singleton exists
+func has_singleton() -> bool:
+	return _instance != null
+
+func _exit_tree():
+	# Clear the static instance when node is freed
+	if _instance == self:
+		_instance = null
