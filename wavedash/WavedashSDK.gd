@@ -94,7 +94,7 @@ func get_or_create_leaderboard(leaderboard_name: String, sort_method: int, displ
 
 func get_leaderboard_entries_for_users(leaderboard_id: String, user_ids: Array[String]):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.getLeaderboardEntriesForUsers(leaderboard_id, user_ids).then(_on_get_leaderboard_entries_result_js)
+		WavedashJS.getLeaderboardEntriesForUsers(leaderboard_id, JSON.stringify(user_ids)).then(_on_get_leaderboard_entries_result_js)
 
 func get_leaderboard_entry_count(leaderboard_id: String):
 	if leaderboard_cache.has(leaderboard_id):
@@ -158,6 +158,10 @@ func _on_post_leaderboard_score_result_gd(args):
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	var success: bool = response.get("success", false)
+	if success:
+		var leaderboard_id: String = response["data"]["leaderboardId"]
+		if leaderboard_cache.has(leaderboard_id):
+			leaderboard_cache[leaderboard_id]["numEntries"] = response["data"]["totalEntries"]
 	posted_leaderboard_score.emit(response)
 
 # Handle events broadcasted from JS to Godot
