@@ -11,8 +11,6 @@ var WavedashJS : JavaScriptObject
 var user_id : String = ""
 var username : String = ""
 var isReady: bool = false
-# Leaderboard id -> leaderboard data (id, num_entries)
-var leaderboard_cache : Dictionary = {}
 
 # Handle events broadcasted from JS to Godot
 # JS -> GD
@@ -92,18 +90,20 @@ func get_or_create_leaderboard(leaderboard_name: String, sort_method: int, displ
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.getOrCreateLeaderboard(leaderboard_name, sort_method, display_type).then(_on_get_leaderboard_result_js)
 
-func get_leaderboard_entries_for_users(leaderboard_id: String, user_ids: Array[String]):
+func get_my_leaderboard_entries(leaderboard_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.getLeaderboardEntriesForUsers(leaderboard_id, JSON.stringify(user_ids)).then(_on_get_leaderboard_entries_result_js)
+		WavedashJS.getMyLeaderboardEntries(leaderboard_id).then(_on_get_leaderboard_entries_result_js)
 
-func get_leaderboard_entry_count(leaderboard_id: String):
-	if leaderboard_cache.has(leaderboard_id):
-		return leaderboard_cache[leaderboard_id]["numEntries"]
-	return -1
-
-func post_leaderboard_score(leaderboard_id: String, keep_best: bool, score: int, metadata: PackedByteArray):
+func get_leaderboard_entry_count(leaderboard_id: String) -> int:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.postLeaderboardScore(leaderboard_id, keep_best, score, metadata).then(_on_post_leaderboard_score_result_js)
+		# Synchronous call, entry count is cached in the JS SDK
+		return WavedashJS.getLeaderboardEntryCount(leaderboard_id)
+
+	return 0
+
+func post_leaderboard_score(leaderboard_id: String, keep_best: bool, score: int, metadata: PackedByteArray = PackedByteArray()):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.uploadLeaderboardScore(leaderboard_id, keep_best, score, metadata).then(_on_post_leaderboard_score_result_js)
 
 func create_lobby(lobby_type: int, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -136,32 +136,17 @@ func _on_get_leaderboard_result_gd(args):
 	print("[WavedashSDK] Got leaderboard: ", args)
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	var success: bool = response.get("success", false)
-	if success:
-		leaderboard_cache[response["data"]["id"]] = response["data"]
 	got_leaderboard.emit(response)
 
 func _on_get_leaderboard_entries_result_gd(args):
 	print("[WavedashSDK] Got leaderboard entries: ", args)
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	# Update the leaderboard cache with the total number of entries
-	var success: bool = response.get("success", false)
-	if success:
-		var leaderboard_id: String = response["data"]["leaderboardId"]
-		if leaderboard_cache.has(leaderboard_id):
-			leaderboard_cache[leaderboard_id]["numEntries"] = response["data"]["totalEntries"]
-	
 	got_leaderboard_entries.emit(response)
 
 func _on_post_leaderboard_score_result_gd(args):
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	var success: bool = response.get("success", false)
-	if success:
-		var leaderboard_id: String = response["data"]["leaderboardId"]
-		if leaderboard_cache.has(leaderboard_id):
-			leaderboard_cache[leaderboard_id]["numEntries"] = response["data"]["totalEntries"]
 	posted_leaderboard_score.emit(response)
 
 # Handle events broadcasted from JS to Godot
