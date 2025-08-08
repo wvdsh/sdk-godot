@@ -99,7 +99,17 @@ func get_leaderboard_entry_count(leaderboard_id: String) -> int:
 		# Synchronous call, entry count is cached in the JS SDK
 		return WavedashJS.getLeaderboardEntryCount(leaderboard_id)
 
-	return 0
+	return -1
+
+func get_leaderboard_entries_around_player(leaderboard_id: String, count_ahead: int, count_behind: int, friends_only: bool):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		# TODO: Support friends_only functionality
+		WavedashJS.listLeaderboardEntriesAroundUser(leaderboard_id, count_ahead, count_behind).then(_on_get_leaderboard_entries_result_js)
+
+func get_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, friends_only: bool):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		# TODO: Support friends_only functionality
+		WavedashJS.listLeaderboardEntries(leaderboard_id, offset, limit).then(_on_get_leaderboard_entries_result_js)
 
 func post_leaderboard_score(leaderboard_id: String, keep_best: bool, score: int, metadata: PackedByteArray = PackedByteArray()):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
