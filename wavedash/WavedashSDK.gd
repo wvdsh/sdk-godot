@@ -23,6 +23,9 @@ var _on_lobby_created_js : JavaScriptObject
 var _on_get_leaderboard_result_js : JavaScriptObject
 var _on_post_leaderboard_score_result_js : JavaScriptObject
 var _on_get_leaderboard_entries_result_js : JavaScriptObject
+var _on_create_ugc_item_result_js : JavaScriptObject
+var _on_update_ugc_item_result_js : JavaScriptObject
+var _on_download_ugc_item_result_js : JavaScriptObject
 
 # Signals that Godot developers can connect to
 signal lobby_joined(payload)
@@ -32,6 +35,9 @@ signal lobby_left(payload)
 signal got_leaderboard(payload)
 signal got_leaderboard_entries(payload)
 signal posted_leaderboard_score(payload)
+signal ugc_item_created(payload)
+signal ugc_item_updated(payload)
+signal ugc_item_downloaded(payload)
 
 func _enter_tree():
 	print("WavedashSDK._enter_tree() called, platform: ", OS.get_name())
@@ -46,6 +52,9 @@ func _enter_tree():
 		_on_get_leaderboard_result_js = JavaScriptBridge.create_callback(_on_get_leaderboard_result_gd)
 		_on_get_leaderboard_entries_result_js = JavaScriptBridge.create_callback(_on_get_leaderboard_entries_result_gd)
 		_on_post_leaderboard_score_result_js = JavaScriptBridge.create_callback(_on_post_leaderboard_score_result_gd)
+		_on_create_ugc_item_result_js = JavaScriptBridge.create_callback(_on_create_ugc_item_result_gd)
+		_on_update_ugc_item_result_js = JavaScriptBridge.create_callback(_on_update_ugc_item_result_gd)
+		_on_download_ugc_item_result_js = JavaScriptBridge.create_callback(_on_download_ugc_item_result_gd)
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
 		var engine = JavaScriptBridge.create_object("Object")
 		engine["type"] = "Godot"
@@ -111,9 +120,9 @@ func get_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, fr
 		# TODO: Support friends_only functionality
 		WavedashJS.listLeaderboardEntries(leaderboard_id, offset, limit).then(_on_get_leaderboard_entries_result_js)
 
-func post_leaderboard_score(leaderboard_id: String, keep_best: bool, score: int, metadata: PackedByteArray = PackedByteArray()):
+func post_leaderboard_score(leaderboard_id: String, keep_best: bool, score: int, ugc_id: String = ""):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.uploadLeaderboardScore(leaderboard_id, keep_best, score, metadata).then(_on_post_leaderboard_score_result_js)
+		WavedashJS.uploadLeaderboardScore(leaderboard_id, keep_best, score, ugc_id).then(_on_post_leaderboard_score_result_js)
 
 func create_lobby(lobby_type: int, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -131,6 +140,19 @@ func sendLobbyChatMsg(lobby_id: String, message: String):
 		WavedashJS.sendLobbyMessage(lobby_id, message)
 		return true
 	return false
+
+# User Generated Content (UGC) functions
+func create_ugc_item(title: String, description: String, local_file_path: String):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.createUGCItem(title, description, local_file_path).then(_on_create_ugc_item_result_js)
+
+func update_ugc_item(item_id: String, title: String, description: String, local_file_path: String):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.updateUGCItem(item_id, title, description, local_file_path).then(_on_update_ugc_item_result_js)
+
+func download_ugc_item(item_id: String, local_file_path: String):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.downloadUGCItem(item_id, local_file_path).then(_on_download_ugc_item_result_js)
 
 # Handle callbacks triggered by Promises resolving
 func _on_lobby_joined_gd(args):
@@ -155,9 +177,28 @@ func _on_get_leaderboard_entries_result_gd(args):
 	got_leaderboard_entries.emit(response)
 
 func _on_post_leaderboard_score_result_gd(args):
+	print("[WavedashSDK] Posted leaderboard score: ", args)
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	posted_leaderboard_score.emit(response)
+
+func _on_create_ugc_item_result_gd(args):
+	print("[WavedashSDK] UGC item created: ", args)
+	var response_json: String = args[0] if args.size() > 0 else null
+	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
+	ugc_item_created.emit(response)
+
+func _on_update_ugc_item_result_gd(args):
+	print("[WavedashSDK] UGC item updated: ", args)
+	var response_json: String = args[0] if args.size() > 0 else null
+	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
+	ugc_item_updated.emit(response)
+
+func _on_download_ugc_item_result_gd(args):
+	print("[WavedashSDK] UGC item downloaded: ", args)
+	var response_json: String = args[0] if args.size() > 0 else null
+	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
+	ugc_item_downloaded.emit(response)
 
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
