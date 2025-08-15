@@ -120,9 +120,9 @@ func get_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, fr
 		# TODO: Support friends_only functionality
 		WavedashJS.listLeaderboardEntries(leaderboard_id, offset, limit).then(_on_get_leaderboard_entries_result_js)
 
-func post_leaderboard_score(leaderboard_id: String, keep_best: bool, score: int, ugc_id: String = ""):
+func post_leaderboard_score(leaderboard_id: String, score: int, keep_best: bool, ugc_id: String = ""):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.uploadLeaderboardScore(leaderboard_id, keep_best, score, ugc_id).then(_on_post_leaderboard_score_result_js)
+		WavedashJS.uploadLeaderboardScore(leaderboard_id, score, keep_best, ugc_id).then(_on_post_leaderboard_score_result_js)
 
 func create_lobby(lobby_type: int, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -142,17 +142,17 @@ func sendLobbyChatMsg(lobby_id: String, message: String):
 	return false
 
 # User Generated Content (UGC) functions
-func create_ugc_item(title: String, description: String, local_file_path: String):
+func create_ugc_item(ugcType: int, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.createUGCItem(title, description, local_file_path).then(_on_create_ugc_item_result_js)
+		WavedashJS.createUGCItem(ugcType, title, description, visibility, local_file_path).then(_on_create_ugc_item_result_js)
 
-func update_ugc_item(item_id: String, title: String, description: String, local_file_path: String):
+func update_ugc_item(ugc_id: String, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.updateUGCItem(item_id, title, description, local_file_path).then(_on_update_ugc_item_result_js)
+		WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path).then(_on_update_ugc_item_result_js)
 
-func download_ugc_item(item_id: String, local_file_path: String):
+func download_ugc_item(ugc_id: String, local_file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.downloadUGCItem(item_id, local_file_path).then(_on_download_ugc_item_result_js)
+		WavedashJS.downloadUGCItem(ugc_id, local_file_path).then(_on_download_ugc_item_result_js)
 
 # Handle callbacks triggered by Promises resolving
 func _on_lobby_joined_gd(args):
