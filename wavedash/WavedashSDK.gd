@@ -56,10 +56,8 @@ func _enter_tree():
 		_on_update_ugc_item_result_js = JavaScriptBridge.create_callback(_on_update_ugc_item_result_gd)
 		_on_download_ugc_item_result_js = JavaScriptBridge.create_callback(_on_download_ugc_item_result_gd)
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
-		var engine = JavaScriptBridge.create_object("Object")
-		engine["type"] = "Godot"
-		engine["SendMessage"] = _js_callback_receiver
-		WavedashJS.setEngineInstance(engine)
+		WavedashJS.engineInstance["type"] = "Godot"
+		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
 
 func init(config: Dictionary):
 	print("WavedashSDK: init() called")
@@ -150,6 +148,7 @@ func update_ugc_item(ugc_id: String, title: String = "", description: String = "
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path).then(_on_update_ugc_item_result_js)
 
+# Download the given UGC item to the given local file path
 func download_ugc_item(ugc_id: String, local_file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.downloadUGCItem(ugc_id, local_file_path).then(_on_download_ugc_item_result_js)
