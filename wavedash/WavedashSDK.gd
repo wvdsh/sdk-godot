@@ -45,8 +45,9 @@ func _enter_tree():
 	if OS.get_name() == Constants.PLATFORM_WEB:
 		WavedashJS = JavaScriptBridge.get_interface("WavedashJS")
 		if not WavedashJS:
-			print("WavedashSDK: WavedashJS not found on window")
+			push_error("WavedashSDK: WavedashJS not found on window")
 			return
+		assert(WavedashJS.engineInstance != null, "WavedashSDK: WavedashJS.engineInstance not found on window. Call WavedashJS.setEngineInstance(engine) before calling engine.startGame()")
 		_on_lobby_joined_js = JavaScriptBridge.create_callback(_on_lobby_joined_gd)
 		_on_lobby_created_js = JavaScriptBridge.create_callback(_on_lobby_created_gd)
 		_on_get_leaderboard_result_js = JavaScriptBridge.create_callback(_on_get_leaderboard_result_gd)
@@ -60,10 +61,8 @@ func _enter_tree():
 		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
 
 func init(config: Dictionary):
-	print("WavedashSDK: init() called")
 	assert(isReady, "WavedashSDK.init() called before WavedashSDK was added to the tree")
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		print("WavedashSDK: Initializing with config: ", config)
 		WavedashJS.init(JSON.stringify(config))
 
 func get_user_id() -> String:
@@ -164,25 +163,21 @@ func _on_lobby_created_gd(args):
 	lobby_created.emit(lobby_id)
 
 func _on_get_leaderboard_result_gd(args):
-	print("[WavedashSDK] Got leaderboard: ", args)
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	got_leaderboard.emit(response)
 
 func _on_get_leaderboard_entries_result_gd(args):
-	print("[WavedashSDK] Got leaderboard entries: ", args)
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	got_leaderboard_entries.emit(response)
 
 func _on_post_leaderboard_score_result_gd(args):
-	print("[WavedashSDK] Posted leaderboard score: ", args)
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	posted_leaderboard_score.emit(response)
 
 func _on_create_ugc_item_result_gd(args):
-	print("[WavedashSDK] UGC item created: ", args)
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	ugc_item_created.emit(response)
@@ -194,7 +189,6 @@ func _on_update_ugc_item_result_gd(args):
 	ugc_item_updated.emit(response)
 
 func _on_download_ugc_item_result_gd(args):
-	print("[WavedashSDK] UGC item downloaded: ", args)
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	ugc_item_downloaded.emit(response)
