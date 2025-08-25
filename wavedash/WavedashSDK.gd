@@ -141,10 +141,18 @@ func sendLobbyChatMsg(lobby_id: String, message: String):
 # User Generated Content (UGC) functions
 func create_ugc_item(ugcType: int, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		# First sync the file system to guarantee JS can read it
+		if local_file_path:
+			print("[WavedashSDK] Syncing file system to guarantee JS can read it")
+			JavaScriptBridge.force_fs_sync()
 		WavedashJS.createUGCItem(ugcType, title, description, visibility, local_file_path).then(_on_create_ugc_item_result_js)
 
 func update_ugc_item(ugc_id: String, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		# First sync the file system to guarantee JS can read it
+		if local_file_path:
+			print("[WavedashSDK] Syncing file system to guarantee JS can read it")
+			JavaScriptBridge.force_fs_sync()
 		WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path).then(_on_update_ugc_item_result_js)
 
 # Download the given UGC item to the given local file path
