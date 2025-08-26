@@ -19,8 +19,6 @@ var _js_callback_receiver : JavaScriptObject
 # Handle results when Godot calls async JS functions
 # GD -> JS (async) -> GD
 
-# Track filesystem sync completion
-var _fs_sync_complete : bool = false
 var _on_lobby_joined_js : JavaScriptObject
 var _on_lobby_created_js : JavaScriptObject
 var _on_get_leaderboard_result_js : JavaScriptObject
@@ -62,6 +60,10 @@ func _enter_tree():
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
 		WavedashJS.engineInstance["type"] = "Godot"
 		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
+		# Put emscripten's FS in the global scope so JS can access it for File IO
+		# TODO: can we do this without eval?
+		JavaScriptBridge.eval("window.FS = FS;")
+		print("[WavedashSDK] FS is now in the global scope")
 
 func init(config: Dictionary):
 	assert(isReady, "WavedashSDK.init() called before WavedashSDK was added to the tree")
@@ -144,69 +146,15 @@ func sendLobbyChatMsg(lobby_id: String, message: String):
 # User Generated Content (UGC) functions
 func create_ugc_item(ugcType: int, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		# First sync the file system to guarantee JS can read it
-		if local_file_path:
-			print("[WavedashSDK] Syncing file system to IndexedDB...")
-			# Use FS.syncfs directly
-			await _sync_idbfs()
-			print("[WavedashSDK] IndexedDB sync confirmed complete, proceeding with UGC creation")
 		# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
 		# Faster, no I/O, saves the file system sync overhead
 		WavedashJS.createUGCItem(ugcType, title, description, visibility, local_file_path).then(_on_create_ugc_item_result_js)
 
 func update_ugc_item(ugc_id: String, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		# First sync the file system to guarantee JS can read it
-		if local_file_path:
-			print("[WavedashSDK] Syncing file system to IndexedDB...")
-			# Use FS.syncfs directly
-			await _sync_idbfs()
-			print("[WavedashSDK] IndexedDB sync confirmed complete, proceeding with UGC update")
+		# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
+		# Faster, no I/O, saves the file system sync overhead
 		WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path).then(_on_update_ugc_item_result_js)
-
-func _sync_idbfs():
-	# Use Emscripten's FS.syncfs with callback to know when sync is complete
-	var js_bridge = Engine.get_singleton("JavaScriptBridge")
-	_fs_sync_complete = false
-	var callback = js_bridge.create_callback(_on_idbfs_sync_complete)
-	
-	js_bridge.eval("""
-		(function(callback) {
-			if (typeof FS !== 'undefined' && FS.syncfs) {
-				console.log('[WavedashSDK] Starting FS.syncfs...');
-				FS.syncfs(false, function(err) {
-					if (err) {
-						console.error('[WavedashSDK] FS.syncfs error:', err);
-						callback(['error', err.toString()]);
-					} else {
-						console.log('[WavedashSDK] FS.syncfs completed successfully');
-						callback(['success']);
-					}
-				});
-			} else {
-				console.warn('[WavedashSDK] FS.syncfs not available, falling back to delay');
-				setTimeout(function() {
-					callback(['fallback']);
-				}, 1000);
-			}
-		})(%s);
-	""" % var_to_str(callback))
-	
-	# Wait for the callback to be called
-	while not _fs_sync_complete:
-		await get_tree().process_frame
-	
-func _on_idbfs_sync_complete(args: Array):
-	var status = args[0] if args.size() > 0 else "unknown"
-	if status == "error":
-		var error = args[1] if args.size() > 1 else "unknown error"
-		print("[WavedashSDK] FS.syncfs failed: %s" % error)
-	elif status == "fallback":
-		print("[WavedashSDK] Used fallback delay (FS.syncfs not available)")
-	else:
-		print("[WavedashSDK] FS.syncfs completed successfully")
-	
-	_fs_sync_complete = true
 
 # Download the given UGC item to the given local file path
 func download_ugc_item(ugc_id: String, local_file_path: String):
