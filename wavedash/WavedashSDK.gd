@@ -60,10 +60,8 @@ func _enter_tree():
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
 		WavedashJS.engineInstance["type"] = "Godot"
 		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
-		# Put emscripten's FS in the global scope so JS can access it for File IO
-		# TODO: can we do this without eval?
-		JavaScriptBridge.eval("window.FS = FS;")
-		print("[WavedashSDK] FS is now in the global scope")
+		# Expose Emscripten's FS so JS can use it for File IO
+		JavaScriptBridge.eval("window.WavedashJS.engineInstance.FS = FS;")
 
 func init(config: Dictionary):
 	assert(isReady, "WavedashSDK.init() called before WavedashSDK was added to the tree")
