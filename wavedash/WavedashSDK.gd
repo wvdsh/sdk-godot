@@ -58,7 +58,7 @@ func _enter_tree():
 		_on_update_ugc_item_result_js = JavaScriptBridge.create_callback(_on_update_ugc_item_result_gd)
 		_on_download_ugc_item_result_js = JavaScriptBridge.create_callback(_on_download_ugc_item_result_gd)
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
-		WavedashJS.engineInstance["type"] = "Godot"
+		WavedashJS.engineInstance["type"] = Constants.ENGINE_GODOT
 		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
 		# Expose Emscripten's FS so JS can use it for File IO
 		JavaScriptBridge.eval("window.WavedashJS.engineInstance.FS = FS;")
