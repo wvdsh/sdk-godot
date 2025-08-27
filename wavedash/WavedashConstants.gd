@@ -11,6 +11,9 @@ const JS_EVENT_LOBBY_MESSAGE = "LobbyMessage"
 # Platform Types
 const PLATFORM_WEB = "Web"
 
+# Engine Types
+const ENGINE_GODOT = "GODOT"
+
 # Leaderboard Sort Methods
 const LEADERBOARD_SORT_ASCENDING = 0
 const LEADERBOARD_SORT_DESCENDING = 1

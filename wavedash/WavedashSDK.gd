@@ -18,6 +18,7 @@ var _js_callback_receiver : JavaScriptObject
 
 # Handle results when Godot calls async JS functions
 # GD -> JS (async) -> GD
+
 var _on_lobby_joined_js : JavaScriptObject
 var _on_lobby_created_js : JavaScriptObject
 var _on_get_leaderboard_result_js : JavaScriptObject
@@ -57,8 +58,10 @@ func _enter_tree():
 		_on_update_ugc_item_result_js = JavaScriptBridge.create_callback(_on_update_ugc_item_result_gd)
 		_on_download_ugc_item_result_js = JavaScriptBridge.create_callback(_on_download_ugc_item_result_gd)
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
-		WavedashJS.engineInstance["type"] = "Godot"
+		WavedashJS.engineInstance["type"] = Constants.ENGINE_GODOT
 		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
+		# Expose Emscripten's FS so JS can use it for File IO
+		JavaScriptBridge.eval("window.WavedashJS.engineInstance.FS = FS;")
 
 func init(config: Dictionary):
 	assert(isReady, "WavedashSDK.init() called before WavedashSDK was added to the tree")
@@ -141,10 +144,14 @@ func sendLobbyChatMsg(lobby_id: String, message: String):
 # User Generated Content (UGC) functions
 func create_ugc_item(ugcType: int, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
+		# Faster, no I/O, saves the file system sync overhead
 		WavedashJS.createUGCItem(ugcType, title, description, visibility, local_file_path).then(_on_create_ugc_item_result_js)
 
 func update_ugc_item(ugc_id: String, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
+		# Faster, no I/O, saves the file system sync overhead
 		WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path).then(_on_update_ugc_item_result_js)
 
 # Download the given UGC item to the given local file path
