@@ -27,6 +27,9 @@ var _on_get_leaderboard_entries_result_js : JavaScriptObject
 var _on_create_ugc_item_result_js : JavaScriptObject
 var _on_update_ugc_item_result_js : JavaScriptObject
 var _on_download_ugc_item_result_js : JavaScriptObject
+var _on_download_remote_file_result_js : JavaScriptObject
+var _on_upload_remote_file_result_js : JavaScriptObject
+var _on_download_remote_directory_result_js : JavaScriptObject
 
 # Signals that Godot developers can connect to
 signal lobby_joined(payload)
@@ -39,6 +42,9 @@ signal posted_leaderboard_score(payload)
 signal ugc_item_created(payload)
 signal ugc_item_updated(payload)
 signal ugc_item_downloaded(payload)
+signal remote_file_downloaded(payload)
+signal remote_file_uploaded(payload)
+signal remote_directory_downloaded(payload)
 
 func _enter_tree():
 	print("WavedashSDK._enter_tree() called, platform: ", OS.get_name())
@@ -57,6 +63,9 @@ func _enter_tree():
 		_on_create_ugc_item_result_js = JavaScriptBridge.create_callback(_on_create_ugc_item_result_gd)
 		_on_update_ugc_item_result_js = JavaScriptBridge.create_callback(_on_update_ugc_item_result_gd)
 		_on_download_ugc_item_result_js = JavaScriptBridge.create_callback(_on_download_ugc_item_result_gd)
+		_on_download_remote_directory_result_js = JavaScriptBridge.create_callback(_on_download_remote_directory_result_gd)
+		_on_download_remote_file_result_js = JavaScriptBridge.create_callback(_on_download_remote_file_result_gd)
+		_on_upload_remote_file_result_js = JavaScriptBridge.create_callback(_on_upload_remote_file_result_gd)
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
 		WavedashJS.engineInstance["type"] = Constants.ENGINE_GODOT
 		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
@@ -127,6 +136,18 @@ func post_leaderboard_score(leaderboard_id: String, score: int, keep_best: bool,
 func create_lobby(lobby_type: int, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.createLobby(lobby_type, max_players).then(_on_lobby_created_js)
+
+func download_remote_directory(path: String):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.downloadRemoteDirectory(path).then(_on_download_remote_directory_result_js)
+
+func download_remote_file(file_path: String):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.downloadRemoteFile(file_path).then(_on_download_remote_file_result_js)
+
+func upload_remote_file(file_path: String):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.uploadRemoteFile(file_path).then(_on_upload_remote_file_result_js)
 
 func join_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -199,6 +220,21 @@ func _on_download_ugc_item_result_gd(args):
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	ugc_item_downloaded.emit(response)
+
+func _on_download_remote_directory_result_gd(args):
+	var response_json: String = args[0] if args.size() > 0 else null
+	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
+	remote_directory_downloaded.emit(response)
+
+func _on_download_remote_file_result_gd(args):
+	var response_json: String = args[0] if args.size() > 0 else null
+	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
+	remote_file_downloaded.emit(response)
+
+func _on_upload_remote_file_result_gd(args):
+	var response_json: String = args[0] if args.size() > 0 else null
+	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
+	remote_file_uploaded.emit(response)
 
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
