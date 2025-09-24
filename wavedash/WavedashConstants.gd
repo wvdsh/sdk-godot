@@ -7,6 +7,15 @@ const LOBBY_TYPE_PRIVATE = 2
 
 # Broadcast Event Types
 const JS_EVENT_LOBBY_MESSAGE = "LobbyMessage"
+const JS_EVENT_LOBBY_JOINED = "LobbyJoined"
+const JS_EVENT_LOBBY_KICKED = "LobbyKicked"
+const JS_EVENT_LOBBY_LEFT = "LobbyLeft"
+const JS_EVENT_LOBBY_USERS_UPDATED = "LobbyUsersUpdated"
+const JS_EVENT_LOBBY_DATA_UPDATED = "LobbyDataUpdated"
+const JS_EVENT_P2P_CONNECTION_ESTABLISHED = "P2PConnectionEstablished"
+const JS_EVENT_P2P_CONNECTION_FAILED = "P2PConnectionFailed"
+const JS_EVENT_P2P_PEER_DISCONNECTED = "P2PPeerDisconnected"
+
 
 # Platform Types
 const PLATFORM_WEB = "Web"
@@ -35,6 +44,18 @@ const UGC_VISIBILITY_PUBLIC = 0
 const UGC_VISIBILITY_FRIENDS_ONLY = 1
 const UGC_VISIBILITY_PRIVATE = 2
 
+# Lobby Visibility
+const LOBBY_VISIBILITY_PUBLIC = 0
+const LOBBY_VISIBILITY_FRIENDS_ONLY = 1
+const LOBBY_VISIBILITY_PRIVATE = 2
+
+# Lobby User Updates
+const LOBBY_USER_JOINED = "JOINED"
+const LOBBY_USER_LEFT = "LEFT"
+const LOBBY_USER_KICKED = "KICKED"
+const LOBBY_USER_BANNED = "BANNED"
+
+
 # API Call Result Codes (HTTP Status Codes)
 const RESULT_OK = 200
 const RESULT_ERROR = 400
@@ -46,3 +67,14 @@ const RESULT_BAD_REQUEST = 400
 const RESULT_UNPROCESSABLE_ENTITY = 422
 const RESULT_TOO_MANY_REQUESTS = 429
 const RESULT_SERVICE_UNAVAILABLE = 503
+
+# P2P Channel Memory Sizes
+const P2P_QUEUE_SIZE = 256 # 256 messages per queue
+const P2P_QUEUE_MESSAGE_SIZE = 1024 # 1KB message size
+const P2P_QUEUE_HEADER_SIZE = 16 # 16 bytes for the header (queue metadata)
+
+# P2P Queue Header Offsets
+const P2P_QUEUE_HEADER_WRITE_INDEX_OFFSET = 0
+const P2P_QUEUE_HEADER_READ_INDEX_OFFSET = 4
+const P2P_QUEUE_HEADER_MESSAGE_COUNT_OFFSET = 8
+const P2P_QUEUE_HEADER_VERSION_OFFSET = 12
