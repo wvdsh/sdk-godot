@@ -35,9 +35,6 @@ var _on_upload_remote_file_result_js : JavaScriptObject
 var _on_download_remote_directory_result_js : JavaScriptObject
 var _on_get_lobbies_result_js : JavaScriptObject
 
-var p2p_channel_queues: Dictionary[int, JavaScriptObject] = {}
-var p2p_channel_views: Dictionary = {}  # Cache typed array views per channel
-
 # Signals that Godot developers can connect to
 signal lobby_joined(payload)
 signal lobby_created(payload)
@@ -82,7 +79,6 @@ func _enter_tree():
 		_on_upload_remote_file_result_js = JavaScriptBridge.create_callback(_on_upload_remote_file_result_gd)
 		_on_get_lobbies_result_js = JavaScriptBridge.create_callback(_on_get_lobbies_result_gd)
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
-		_ensure_base64_helpers()
 		WavedashJS.engineInstance["type"] = Constants.ENGINE_GODOT
 		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
 		# Expose Emscripten's FS so JS can use it for File IO
@@ -240,21 +236,15 @@ func download_ugc_item(ugc_id: String, local_file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.downloadUGCItem(ugc_id, local_file_path).then(_on_download_ugc_item_result_js)
 
-# P2P
-# Send a P2P message from Godot only if the peer is ready to receive messages
+# P2P messaging
+# Send a P2P message from Godot. JS will only send the message if the peer is ready to receive
 func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel: int = 0, reliable: bool = true) -> bool:
 	if payload.size() == 0:
 		print("send_p2p_message: Payload is empty")
 		return false
-	if target_user_id == "" and not WavedashJS.isBroadcastReady():
-		print("send_p2p_message: Broadcast is not ready")
-		return false
-	elif target_user_id != "" and not WavedashJS.isPeerReady(target_user_id):
-		print("send_p2p_message: Peer is not ready")
-		return false
 	
-	# Can we get our PackedByteArray across the JS barrier into a Uint8Array?
-	# var js_array = JavaScriptBridge.create_object("Uint8Array", [payload])
+	# Option 1: Can we get our PackedByteArray across the JS barrier into a Uint8Array? Godot doesn't support this natively
+	# var js_array = JavaScriptBridge.create_object("Uint8Array", payload)
 	# if target_user_id == "":
 	# 	# Broadcast to all peers, hoping the cost of passing along the PackedByteArray is not too high
 	# 	WavedashJS.broadcastP2PMessage(channel, reliable, js_array)
@@ -262,37 +252,47 @@ func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel:
 	# 	# Send to specific peer, hoping the cost of passing along the PackedByteArray is not too high
 	# 	WavedashJS.sendP2PMessage(target_user_id, channel, reliable, js_array)
 
-	# Write to a SharedArrayBuffer that JS will read from
-	var buffer = WavedashJS.getP2PChannelQueue(channel)
-	if not buffer:
-		push_error("Channel ", channel, " not available")
-		return false
-	
-	# Write to outgoing section of SharedArrayBuffer
-	write_to_outgoing_queue(buffer, payload, channel)
-	
-	# Trigger JavaScript to read the message from the outgoing queue and send to peers
+	# Option 2: Write to a SharedArrayBuffer that JS will read from
+	# This still requires base64 encoding and calling JS functions to write to the buffer via JS bridge, so we don't win any performance here
+	# var buffer = WavedashJS.getP2PChannelQueue(channel)
+	# if not buffer:
+	# 	push_error("Channel ", channel, " not available")
+	# 	return false
+	# write_to_outgoing_queue(buffer, payload, channel)
+
+	# Option 3: Just base64 encode and pass along as a string
+	# (TODO: Pass a PackedByteArray directly once Godot supports marshalling arrays from GD -> JS)
+	var base64_data = Marshalls.raw_to_base64(payload)
 	if target_user_id == "":
 		# Broadcast to all peers
-		return WavedashJS.broadcastP2PMessage(channel, reliable)
+		return WavedashJS.broadcastP2PMessage(channel, reliable, base64_data)
 	else:
 		# Send to specific peer
-		return WavedashJS.sendP2PMessage(target_user_id, channel, reliable)
+		return WavedashJS.sendP2PMessage(target_user_id, channel, reliable, base64_data)
 
 # Read P2P messages from the incoming queue for a specific channel
 func receive_p2p_messages_on_channel(channel: int, max_messages: int = 32) -> Array[Dictionary]:
 	if OS.get_name() != Constants.PLATFORM_WEB or not WavedashJS:
 		return []
 	
-	# Get or create cached views for this channel
-	if not p2p_channel_views.has(channel):
-		var buffer = WavedashJS.getP2PChannelQueue(channel)
-		if not buffer:
-			return []
-		_create_channel_views(channel, buffer)
+	var messages: Array[Dictionary] = []
+	var messages_read = 0
 	
-	var views = p2p_channel_views[channel]
-	return read_messages_from_queue(views.buffer, views.incoming_data_view, max_messages)
+	while messages_read < max_messages:
+		var p2p_packet: PackedByteArray = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.readP2PMessageFromChannel(channel))
+		# Empty response indicates the inbox is empty
+		if p2p_packet.size() == 0:
+			break
+		
+		# Decode the raw binary packet into identity, channel, and binary payload
+		var decoded: Dictionary = _decode_p2p_packet(p2p_packet)
+		# Empty dict means malformed packet (data.size() < 40), so skip it
+		if decoded:
+			messages.append(decoded)
+		
+		messages_read += 1
+	
+	return messages
 
 # Handle callbacks triggered by Promises resolving
 func _on_lobby_joined_gd(args):
@@ -420,148 +420,8 @@ func _dispatch_js_event(args):
 			push_warning("[WavedashSDK] Received unknown event from JS: " + method_name)
 
 # Helper functions
-
-# Convert PackedByteArray to base64 string for direct passing to JavaScript
-func _packed_byte_array_to_base64(data: PackedByteArray) -> String:
-	return Marshalls.raw_to_base64(data)
-
-# Read/write uint32 from SharedArrayBuffer
-func buffer_get_uint32(buffer: JavaScriptObject, byte_offset: int) -> int:
-	var view = JavaScriptBridge.create_object("DataView", buffer)
-	return view.getUint32(byte_offset, true)  # true = little-endian
-
-func buffer_set_uint32(buffer: JavaScriptObject, byte_offset: int, value: int) -> void:
-	var view = JavaScriptBridge.create_object("DataView", buffer)
-	view.setUint32(byte_offset, value, true)  # true = little-endian
-
-# Atomic operations for SharedArrayBuffer
-func atomic_load_int32(buffer: JavaScriptObject, byte_offset: int) -> int:
-	var js = JavaScriptBridge.get_interface("Atomics")
-	var view = JavaScriptBridge.create_object("Int32Array", buffer, byte_offset, 1)
-	return js.load(view, 0)
-
-func atomic_store_int32(buffer: JavaScriptObject, byte_offset: int, value: int) -> void:
-	var js = JavaScriptBridge.get_interface("Atomics")
-	var view = JavaScriptBridge.create_object("Int32Array", buffer, byte_offset, 1)
-	js.store(view, 0, value)
-
-func atomic_add_int32(buffer: JavaScriptObject, byte_offset: int, delta: int) -> int:
-	var js = JavaScriptBridge.get_interface("Atomics")
-	var view = JavaScriptBridge.create_object("Int32Array", buffer, byte_offset, 1)
-	return js.add(view, 0, delta)
-
-func atomic_sub_int32(buffer: JavaScriptObject, byte_offset: int, delta: int) -> int:
-	var js = JavaScriptBridge.get_interface("Atomics")
-	var view = JavaScriptBridge.create_object("Int32Array", buffer, byte_offset, 1)
-	return js.sub(view, 0, delta)
-
-# Create the base64 helper functions if they don't exist
-func _ensure_base64_helpers() -> void:
-	JavaScriptBridge.eval("""
-		window.readBytesAsBase64 = function(view, offset, length) {
-			const bytes = new Uint8Array(view.buffer, view.byteOffset + offset, length);
-			let binary = '';
-			for (let i = 0; i < bytes.length; i++) {
-				binary += String.fromCharCode(bytes[i]);
-			}
-			return btoa(binary);
-		};
-		window.writeBytesFromBase64 = function(buffer, offset, base64Data) {
-			const binaryString = atob(base64Data);
-			const bytes = new Uint8Array(buffer, offset, binaryString.length);
-			for (let i = 0; i < binaryString.length; i++) {
-				bytes[i] = binaryString.charCodeAt(i);
-			}
-		};
-	""", true)
-
-# Create and cache typed array views for a channel
-func _create_channel_views(channel: int, buffer: JavaScriptObject) -> void:
-	var views = {}
-	views.buffer = buffer
-	
-	# Create persistent typed array views for different sections
-	var total_size = (Constants.P2P_QUEUE_HEADER_SIZE * 2) + (Constants.P2P_QUEUE_SIZE * Constants.P2P_QUEUE_MESSAGE_SIZE * 2)
-	
-	# Incoming data view (for reading messages from JS)
-	var incoming_data_offset = Constants.P2P_QUEUE_HEADER_SIZE * 2
-	var incoming_data_size = Constants.P2P_QUEUE_SIZE * Constants.P2P_QUEUE_MESSAGE_SIZE
-	views.incoming_data_view = JavaScriptBridge.create_object("Uint8Array", buffer, incoming_data_offset, incoming_data_size)
-	
-	# Outgoing data view (for writing messages to JS)
-	var outgoing_data_offset = (Constants.P2P_QUEUE_HEADER_SIZE * 2) + incoming_data_size
-	var outgoing_data_size = Constants.P2P_QUEUE_SIZE * Constants.P2P_QUEUE_MESSAGE_SIZE
-	views.outgoing_data_view = JavaScriptBridge.create_object("Uint8Array", buffer, outgoing_data_offset, outgoing_data_size)
-	
-	p2p_channel_views[channel] = views
-
-# Efficiently write bytes to SharedArrayBuffer using base64 encoding
-func write_bytes_to_buffer(buffer: JavaScriptObject, offset: int, data: PackedByteArray) -> void:
-	# Encode data as base64 and write in one bridge call
-	var base64_data = Marshalls.raw_to_base64(data)
-	JavaScriptBridge.get_interface("window").writeBytesFromBase64(buffer, offset, base64_data)
-
-# Efficiently read bytes from a cached Uint8Array view using base64 encoding
-# TODO: See if we can get into emscripten and actually share memory between JS and Godot so we don't have to encode/decode base64
-func read_bytes_from_view(view: JavaScriptObject, offset: int, length: int) -> PackedByteArray:
-	# Call the helper (single bridge call for actual data transfer)
-	var base64_data = JavaScriptBridge.get_interface("window").readBytesAsBase64(view, offset, length)
-	
-	# Decode base64 to PackedByteArray (native C++ conversion)
-	return Marshalls.base64_to_raw(base64_data)
-
-# Read messages from the incoming queue (P2P network → Game engine)
-func read_messages_from_queue(buffer: JavaScriptObject, data_view: JavaScriptObject, max_messages: int) -> Array[Dictionary]:
-	var messages: Array[Dictionary] = []
-	var messages_read = 0
-	
-	# Incoming queue is at offset 0
-	var incoming_header_offset = 0
-	var incoming_data_offset = Constants.P2P_QUEUE_HEADER_SIZE * 2  # Skip both headers
-	
-	while messages_read < max_messages:
-		# Read current queue state atomically
-		var message_count = atomic_load_int32(buffer, incoming_header_offset + Constants.P2P_QUEUE_HEADER_MESSAGE_COUNT_OFFSET)
-		
-		if message_count == 0:
-			break  # No more messages
-		
-		var read_index = atomic_load_int32(buffer, incoming_header_offset + 4)  # readIndex at offset 4
-		
-		# Calculate read position in the incoming data buffer
-		var read_offset = incoming_data_offset + (read_index * Constants.P2P_QUEUE_MESSAGE_SIZE)
-		
-		# Read message size
-		var message_size = buffer_get_uint32(buffer, read_offset)
-		
-		if message_size == 0 or message_size > Constants.P2P_QUEUE_MESSAGE_SIZE - 4:
-			# Invalid message, skip it
-			var next_read_index = (read_index + 1) % Constants.P2P_QUEUE_SIZE
-			atomic_store_int32(buffer, incoming_header_offset + 4, next_read_index)
-			atomic_sub_int32(buffer, incoming_header_offset + Constants.P2P_QUEUE_HEADER_MESSAGE_COUNT_OFFSET, 1)
-			continue
-		
-		# Read message data efficiently from cached view
-		# data_view is already offset to incoming data section
-		var view_offset = (read_index * Constants.P2P_QUEUE_MESSAGE_SIZE) + 4
-		var message_data = read_bytes_from_view(data_view, view_offset, message_size)
-		
-		# Decode the message
-		var decoded = decode_binary_message(message_data)
-		if decoded:
-			messages.append(decoded)
-		
-		# Update read pointer atomically
-		var next_read_index = (read_index + 1) % Constants.P2P_QUEUE_SIZE
-		atomic_store_int32(buffer, incoming_header_offset + 4, next_read_index)  # readIndex
-		atomic_sub_int32(buffer, incoming_header_offset + Constants.P2P_QUEUE_HEADER_MESSAGE_COUNT_OFFSET, 1)  # messageCount--
-		
-		messages_read += 1
-	
-	return messages
-
-# Decode a binary P2P message
-func decode_binary_message(data: PackedByteArray) -> Dictionary:
+# Decode a binary P2P packet into {identity: String, channel: int, payload: PackedByteArray}
+func _decode_p2p_packet(data: PackedByteArray) -> Dictionary:
 	# Binary format: [fromUserId(32)][channel(4)][dataLength(4)][payload(...)]
 	if data.size() < 40:  # Minimum size for header
 		return {}
@@ -595,49 +455,3 @@ func decode_binary_message(data: PackedByteArray) -> Dictionary:
 		result["payload"] = PackedByteArray()
 	
 	return result
-
-# Write to the outgoing queue for the given channel
-func write_to_outgoing_queue(buffer: JavaScriptObject, payload: PackedByteArray, channel: int):
-	# Create binary message format: [fromUserId(32)][channel(4)][dataLength(4)][payload(...)]
-	var message_data = PackedByteArray()
-
-	# fromUserId (32 bytes, padded)
-	var from_id = user_id.to_ascii_buffer()
-	from_id.resize(32)  # Pad to 32 bytes
-	message_data.append_array(from_id)
-
-	# channel (4 bytes)
-	message_data.append_array(PackedByteArray([channel & 0xFF, (channel >> 8) & 0xFF, (channel >> 16) & 0xFF, (channel >> 24) & 0xFF]))
-
-	# payload length (4 bytes)
-	var payload_len = payload.size()
-	for i in range(4):
-		message_data.append((payload_len >> (i * 8)) & 0xFF)
-
-	# payload data
-	message_data.append_array(payload)
-
-	# Write to outgoing queue (Game engine → P2P network)
-	# Queue layout: [Incoming Header][Outgoing Header][Incoming Data][Outgoing Data]
-	var outgoing_header_offset = Constants.P2P_QUEUE_HEADER_SIZE # Skip incoming header
-	var outgoing_data_offset = (Constants.P2P_QUEUE_HEADER_SIZE * 2) + (Constants.P2P_QUEUE_SIZE * Constants.P2P_QUEUE_MESSAGE_SIZE)  # Skip headers + incoming data
-
-	# Read current write position atomically
-	var write_index = atomic_load_int32(buffer, outgoing_header_offset)  # writeIndex
-	var message_count = atomic_load_int32(buffer, outgoing_header_offset + Constants.P2P_QUEUE_HEADER_MESSAGE_COUNT_OFFSET)  # messageCount
-
-	if message_count >= Constants.P2P_QUEUE_SIZE:  # QUEUE_SIZE
-		print("Outgoing queue full for channel ", channel)
-		return
-
-	# Write message
-	var write_offset = outgoing_data_offset + (write_index * Constants.P2P_QUEUE_MESSAGE_SIZE)  # MESSAGE_SIZE
-	buffer_set_uint32(buffer, write_offset, message_data.size())  # Message size
-
-	# Write message data efficiently using base64 encoding
-	write_bytes_to_buffer(buffer, write_offset + 4, message_data)
-
-	# Update queue pointers atomically
-	var next_write_index = (write_index + 1) % Constants.P2P_QUEUE_SIZE
-	atomic_store_int32(buffer, outgoing_header_offset, next_write_index)  # writeIndex
-	atomic_add_int32(buffer, outgoing_header_offset + Constants.P2P_QUEUE_HEADER_MESSAGE_COUNT_OFFSET, 1)  # messageCount++
