@@ -15,6 +15,9 @@ const JS_EVENT_LOBBY_DATA_UPDATED = "LobbyDataUpdated"
 const JS_EVENT_P2P_CONNECTION_ESTABLISHED = "P2PConnectionEstablished"
 const JS_EVENT_P2P_CONNECTION_FAILED = "P2PConnectionFailed"
 const JS_EVENT_P2P_PEER_DISCONNECTED = "P2PPeerDisconnected"
+const JS_EVENT_BACKEND_CONNECTED = "BackendConnected"
+const JS_EVENT_BACKEND_RECONNECTING = "BackendReconnecting"
+const JS_EVENT_BACKEND_DISCONNECTED = "BackendDisconnected"
 
 
 # Platform Types
