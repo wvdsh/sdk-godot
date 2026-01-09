@@ -255,37 +255,42 @@ func download_ugc_item(ugc_id: String, local_file_path: String):
 # Send a P2P message from Godot. JS will only send the message if the peer is ready to receive
 func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel: int = 0, reliable: bool = true) -> bool:
 	if payload.size() == 0:
-		print("send_p2p_message: Payload is empty")
+		push_warning("Dropping empty P2P message")
 		return false
+	
+	# Tried a few options here for getting a Godot PackedByteArray across the JS barrier into a Uint8Array.
+	# Logging them for clarity, Option 4 is the best for < 16KB payloads
+	# (TODO: Pass a direct view into the Godot WASM heap if Godot ever supports it the way Unity JSLib does)
 	
 	# Option 1: Can we get our PackedByteArray across the JS barrier into a Uint8Array? Godot doesn't support this natively
 	# var js_array = JavaScriptBridge.create_object("Uint8Array", payload)
-	# if target_user_id == "":
-	# 	# Broadcast to all peers, hoping the cost of passing along the PackedByteArray is not too high
-	# 	WavedashJS.broadcastP2PMessage(channel, reliable, js_array)
-	# else:
-	# 	# Send to specific peer, hoping the cost of passing along the PackedByteArray is not too high
-	# 	WavedashJS.sendP2PMessage(target_user_id, channel, reliable, js_array)
 
 	# Option 2: Write to a SharedArrayBuffer that JS will read from
-	# This still requires base64 encoding and calling JS functions to write to the buffer via JS bridge, so we don't win any performance here
+	# This still requires calling JS functions to write to the buffer via JS bridge, so we don't win any performance here
 	# var buffer = WavedashJS.getP2PChannelQueue(channel)
-	# if not buffer:
-	# 	push_error("Channel ", channel, " not available")
-	# 	return false
 	# write_to_outgoing_queue(buffer, payload, channel)
 
 	# Option 3: Just base64 encode and pass along as a string
-	# (TODO: Pass a PackedByteArray directly once Godot supports marshalling arrays from GD -> JS)
-	var base64_data = Marshalls.raw_to_base64(payload)
+	# var base64_data = Marshalls.raw_to_base64(payload)
+
+	# Option 4: Copy data byte by byte to a pre-allocated JS ArrayBuffer. Fastest option for small payloads.
+	var payload_size = payload.size()
+	var js_buffer = WavedashJS.getP2POutgoingMessageBuffer()
+	if payload_size > js_buffer.length:
+		push_warning("P2P message exceeds maximum payload length ", payload_size, " > ", js_buffer.length, " dropping message")
+		return false
+	# Copy bytes (1 bridge call per byte unfortunately, still faster than base64 encoding as long as payload is < 16KB)
+	for i in range(payload_size):
+		js_buffer[i] = payload[i]
 	if target_user_id == "":
 		# Broadcast to all peers
-		return WavedashJS.broadcastP2PMessage(channel, reliable, base64_data)
+		return WavedashJS.broadcastP2PMessage(channel, reliable, js_buffer, payload_size)
 	else:
 		# Send to specific peer
-		return WavedashJS.sendP2PMessage(target_user_id, channel, reliable, base64_data)
+		return WavedashJS.sendP2PMessage(target_user_id, channel, reliable, js_buffer, payload_size)
 
 # Read P2P messages from the incoming queue for a specific channel
+# Deprecated, use receive_all_p2p_messages_on_channel instead
 func receive_p2p_messages_on_channel(channel: int, max_messages: int = 32) -> Array[Dictionary]:
 	if OS.get_name() != Constants.PLATFORM_WEB or not WavedashJS:
 		return []
@@ -306,6 +311,26 @@ func receive_p2p_messages_on_channel(channel: int, max_messages: int = 32) -> Ar
 			messages.append(decoded)
 		
 		messages_read += 1
+	
+	return messages
+
+# Read all P2P messages from the incoming queue for a specific channel
+func receive_all_p2p_messages_on_channel(channel: int) -> Array[Dictionary]:
+	if OS.get_name() != Constants.PLATFORM_WEB or not WavedashJS:
+		return []
+	
+	var messages: Array[Dictionary] = []
+	var raw_messages: PackedByteArray = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.drainChannelToBuffer(channel))
+	var read_offset = 0
+	while read_offset < raw_messages.size():
+		var message_length = raw_messages[read_offset] | (raw_messages[read_offset + 1] << 8) | (raw_messages[read_offset + 2] << 16) | (raw_messages[read_offset + 3] << 24)
+		read_offset += 4
+		if read_offset + message_length > raw_messages.size():
+			push_warning("P2P message exceeds buffer length", read_offset + message_length, " > ", raw_messages.size(), " dropping message")
+			break
+		var message = raw_messages.slice(read_offset, read_offset + message_length)
+		read_offset += message_length
+		messages.append(_decode_p2p_packet(message))
 	
 	return messages
 
