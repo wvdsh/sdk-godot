@@ -315,7 +315,7 @@ func receive_p2p_messages_on_channel(channel: int, max_messages: int = 32) -> Ar
 	return messages
 
 # Read all P2P messages from the incoming queue for a specific channel
-func receive_all_p2p_messages_on_channel(channel: int) -> Array[Dictionary]:
+func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 	if OS.get_name() != Constants.PLATFORM_WEB or not WavedashJS:
 		return []
 	
