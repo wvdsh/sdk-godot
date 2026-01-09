@@ -320,7 +320,7 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 		return []
 	
 	var messages: Array[Dictionary] = []
-	var raw_messages: PackedByteArray = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.drainChannelToBuffer(channel))
+	var raw_messages: PackedByteArray = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.drainP2PChannelToBuffer(channel))
 	var read_offset = 0
 	while read_offset < raw_messages.size():
 		var message_length = raw_messages[read_offset] | (raw_messages[read_offset + 1] << 8) | (raw_messages[read_offset + 2] << 16) | (raw_messages[read_offset + 3] << 24)
