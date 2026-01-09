@@ -290,7 +290,7 @@ func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel:
 		return WavedashJS.sendP2PMessage(target_user_id, channel, reliable, js_buffer, payload_size)
 
 # Read P2P messages from the incoming queue for a specific channel
-# Deprecated, use receive_all_p2p_messages_on_channel instead
+# Use drain_p2p_channel instead for better performance
 func receive_p2p_messages_on_channel(channel: int, max_messages: int = 32) -> Array[Dictionary]:
 	if OS.get_name() != Constants.PLATFORM_WEB or not WavedashJS:
 		return []
