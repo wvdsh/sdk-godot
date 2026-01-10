@@ -336,7 +336,7 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 			messages.append(decoded)
 		else:
 			push_warning("P2P message is malformed, dropping message")
-			break
+			continue
 	
 	return messages
 
