@@ -322,7 +322,8 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 	var messages: Array[Dictionary] = []
 	var raw_messages: PackedByteArray = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.drainP2PChannelToBuffer(channel))
 	var read_offset = 0
-	while read_offset < raw_messages.size():
+
+	while read_offset + 4 <= raw_messages.size():
 		var message_length = raw_messages[read_offset] | (raw_messages[read_offset + 1] << 8) | (raw_messages[read_offset + 2] << 16) | (raw_messages[read_offset + 3] << 24)
 		read_offset += 4
 		if read_offset + message_length > raw_messages.size():
@@ -330,7 +331,12 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 			break
 		var message = raw_messages.slice(read_offset, read_offset + message_length)
 		read_offset += message_length
-		messages.append(_decode_p2p_packet(message))
+		var decoded: Dictionary = _decode_p2p_packet(message)
+		if decoded:
+			messages.append(decoded)
+		else:
+			push_warning("P2P message is malformed, dropping message")
+			continue
 	
 	return messages
 
