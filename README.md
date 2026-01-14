@@ -41,11 +41,25 @@ A Godot Engine plugin that enables Godot Web Build games to use [Wavedash Online
 func _ready():
     # Initialize with custom configuration
     WavedashSDK.init({
-        debug: false,
-        deferEvents: true
+        "debug": false,
+        "deferEvents": true  # Wait until ready_for_events() to send lobby events
     })
 
-    # ... game startup
+    # Download cloud saves before loading game data
+    WavedashSDK.remote_directory_downloaded.connect(_on_saves_downloaded)
+    var saves_path = "%s/" % OS.get_user_data_dir()
+    WavedashSDK.download_remote_directory(saves_path)
+
+func _on_saves_downloaded(response: Dictionary):
+    if response.get("success", false):
+        print("Cloud saves synced")
+    
+    # Load your game configs now that remote data is available
+    _load_game_data()
+    
+    # Request stats and wait for them before proceeding
+    WavedashSDK.request_stats()
+    await WavedashSDK.current_stats_received
     
     # Signal to JS SDK that game is ready to receive events
     WavedashSDK.ready_for_events()
@@ -125,6 +139,10 @@ func _on_lobby_created(response: Dictionary):
     if response.get("success", false):
         var lobby_id = response["data"]
         print("Created lobby: ", lobby_id)
+        
+        # Set lobby metadata (only host can do this)
+        WavedashSDK.set_lobby_data(lobby_id, "name", "My Game Room")
+        WavedashSDK.set_lobby_data(lobby_id, "mode", "deathmatch")
 ```
 
 ### Join a Lobby
@@ -148,7 +166,23 @@ WavedashSDK.list_available_lobbies()
 
 func _on_got_lobbies(lobbies: Array):
     for lobby in lobbies:
-        print("Lobby: ", lobby["lobbyId"])
+        var lobby_id = lobby["lobbyId"]
+        var name = WavedashSDK.get_lobby_data(lobby_id, "name")
+        var player_count = WavedashSDK.get_num_lobby_users(lobby_id)
+        print("Lobby %s: %s (%d players)" % [lobby_id, name, player_count])
+```
+
+### Lobby Host & Users
+
+```gdscript
+# Check if current user is the lobby host
+var host_id = WavedashSDK.get_lobby_host_id(lobby_id)
+var is_host = (host_id == WavedashSDK.get_user_id())
+
+# Get all users in the lobby
+var users = WavedashSDK.get_lobby_users(lobby_id)
+for user in users:
+    print("User: %s (host: %s)" % [user["username"], user["isHost"]])
 ```
 
 ### Lobby Data & Messaging
@@ -178,34 +212,70 @@ WavedashSDK.lobby_users_updated.connect(_on_users_updated)
 
 func _on_users_updated(data: Dictionary):
     var user_id = data["userId"]
-    var change_type = data["changeType"]  # "JOINED" or "LEFT"
-    print("User %s %s the lobby" % [user_id, change_type])
+    var username = data["username"]
+    var change_type = data["changeType"]
+    
+    # changeType matches WavedashConstants values:
+    # LOBBY_USER_JOINED, LOBBY_USER_LEFT, LOBBY_USER_KICKED, LOBBY_USER_BANNED
+    match change_type:
+        WavedashConstants.LOBBY_USER_JOINED:
+            print("%s joined the lobby" % username)
+        WavedashConstants.LOBBY_USER_LEFT:
+            print("%s left the lobby" % username)
+        WavedashConstants.LOBBY_USER_KICKED:
+            print("%s was kicked" % username)
 ```
 
 ## P2P Networking
 
+P2P connections are automatically established when users join the same lobby.
+
+### Channels
+
+Use different channels to separate message types:
+
+```gdscript
+const CHANNEL_RELIABLE = 0    # For important game state
+const CHANNEL_UNRELIABLE = 1  # For frequent updates like player positions
+```
+
 ### Send Messages
 
 ```gdscript
-# Send to a specific player
-var payload = "Hello".to_utf8_buffer()
-WavedashSDK.send_p2p_message(target_user_id, payload, 0, true)
+# Send reliable message to a specific player
+var data = {"action": "ready"}
+var payload = var_to_bytes(data)
+WavedashSDK.send_p2p_message(target_user_id, payload, CHANNEL_RELIABLE, true)
 
-# Broadcast to all peers
-WavedashSDK.send_p2p_message("", payload, 0, true)
+# Broadcast to all peers (pass empty string as target)
+WavedashSDK.send_p2p_message("", payload, CHANNEL_RELIABLE, true)
+
+# Send unreliable message (for frequent updates)
+var position_data = var_to_bytes({"x": 100, "y": 200})
+WavedashSDK.send_p2p_message("", position_data, CHANNEL_UNRELIABLE, false)
 ```
 
 ### Receive Messages
 
 ```gdscript
 func _process(_delta):
-    # Drain all messages from channel 0
-    var messages = WavedashSDK.drain_p2p_channel(0)
+    # Drain messages from each channel
+    _process_reliable_messages()
+    _process_unreliable_messages()
+
+func _process_reliable_messages():
+    var messages = WavedashSDK.drain_p2p_channel(CHANNEL_RELIABLE)
     for msg in messages:
         var from_user = msg["identity"]
-        var channel = msg["channel"]
-        var payload: PackedByteArray = msg["payload"]
-        print("Received from %s: %s" % [from_user, payload.get_string_from_utf8()])
+        var data = bytes_to_var(msg["payload"])
+        print("Received from %s: %s" % [from_user, data])
+
+func _process_unreliable_messages():
+    var messages = WavedashSDK.drain_p2p_channel(CHANNEL_UNRELIABLE)
+    for msg in messages:
+        var from_user = msg["identity"]
+        var data = bytes_to_var(msg["payload"])
+        # Update player position, etc.
 ```
 
 ### P2P Connection Events
@@ -214,6 +284,21 @@ func _process(_delta):
 WavedashSDK.p2p_connection_established.connect(_on_p2p_connected)
 WavedashSDK.p2p_connection_failed.connect(_on_p2p_failed)
 WavedashSDK.p2p_peer_disconnected.connect(_on_peer_disconnected)
+
+func _on_p2p_connected(data: Dictionary):
+    var user_id = data["userId"]
+    var username = data["username"]
+    print("P2P connected to %s" % username)
+    
+    # Send initial handshake to new peer
+    var handshake = var_to_bytes({"msg": "hello"})
+    WavedashSDK.send_p2p_message(user_id, handshake, CHANNEL_RELIABLE, true)
+
+func _on_p2p_failed(data: Dictionary):
+    print("P2P connection failed: %s" % data["username"])
+
+func _on_peer_disconnected(data: Dictionary):
+    print("Peer disconnected: %s" % data["username"])
 ```
 
 ## Achievements & Stats
@@ -244,33 +329,42 @@ var unlocked = WavedashSDK.get_achievement("first_win")
 
 ## Cloud Storage
 
+The SDK expects absolute filesystem paths, not Godot's `user://` virtual paths. Use `OS.get_user_data_dir()` to get the absolute path:
+
 ```gdscript
 # Upload a file
 WavedashSDK.remote_file_uploaded.connect(_on_file_uploaded)
-WavedashSDK.upload_remote_file("user://save_data.json")
+var file_path = "%s/save_data.json" % OS.get_user_data_dir()
+WavedashSDK.upload_remote_file(file_path)
 
 # Download a file
 WavedashSDK.remote_file_downloaded.connect(_on_file_downloaded)
-WavedashSDK.download_remote_file("user://save_data.json")
+var file_path = "%s/save_data.json" % OS.get_user_data_dir()
+WavedashSDK.download_remote_file(file_path)
 
 # Download an entire directory
 WavedashSDK.remote_directory_downloaded.connect(_on_directory_downloaded)
-WavedashSDK.download_remote_directory("user://saves/")
+var dir_path = "%s/saves/" % OS.get_user_data_dir()
+WavedashSDK.download_remote_directory(dir_path)
 ```
 
 ## User Generated Content (UGC)
+
+UGC functions also require absolute filesystem paths:
 
 ### Create UGC Item
 
 ```gdscript
 WavedashSDK.ugc_item_created.connect(_on_ugc_created)
 
+# Use absolute path for the file to upload
+var file_path = "%s/levels/my_level.dat" % OS.get_user_data_dir()
 WavedashSDK.create_ugc_item(
     WavedashConstants.UGC_TYPE_COMMUNITY,
     "My Level",
     "A custom level I made",
     WavedashConstants.UGC_VISIBILITY_PUBLIC,
-    "user://levels/my_level.dat"
+    file_path
 )
 
 func _on_ugc_created(response: Dictionary):
@@ -283,7 +377,17 @@ func _on_ugc_created(response: Dictionary):
 
 ```gdscript
 WavedashSDK.ugc_item_downloaded.connect(_on_ugc_downloaded)
-WavedashSDK.download_ugc_item(ugc_id, "user://downloads/level.dat")
+
+# Create directory with Godot path, but pass absolute path to SDK
+DirAccess.make_dir_recursive_absolute("user://downloads")
+var download_path = "%s/downloads/%s.dat" % [OS.get_user_data_dir(), ugc_id]
+WavedashSDK.download_ugc_item(ugc_id, download_path)
+
+func _on_ugc_downloaded(response: Dictionary):
+    if response.get("success", false):
+        # Read the file using Godot's user:// path
+        var ugc_id = response["data"]
+        var bytes = FileAccess.get_file_as_bytes("user://downloads/%s.dat" % ugc_id)
 ```
 
 ## Signals Reference
@@ -321,6 +425,12 @@ WavedashSDK.download_ugc_item(ugc_id, "user://downloads/level.dat")
 - `LOBBY_TYPE_PUBLIC` (0)
 - `LOBBY_TYPE_FRIENDS_ONLY` (1)
 - `LOBBY_TYPE_PRIVATE` (2)
+
+### Lobby User Updates
+- `LOBBY_USER_JOINED` — User joined the lobby
+- `LOBBY_USER_LEFT` — User left the lobby
+- `LOBBY_USER_KICKED` — User was kicked
+- `LOBBY_USER_BANNED` — User was banned
 
 ### Leaderboard Sort Methods
 - `LEADERBOARD_SORT_ASCENDING` (0)
