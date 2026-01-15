@@ -10,7 +10,7 @@ var WavedashJS : JavaScriptObject
 # Cache what we can so the next call doesn't have to wait for JS
 var user_id : String = ""
 var username : String = ""
-var isReady: bool = false
+var entered_tree: bool = false
 
 var cached_lobby_host_id : String = ""
 var cached_lobby_id : String = ""
@@ -64,7 +64,7 @@ signal backend_disconnected(payload)
 
 func _enter_tree():
 	print("WavedashSDK._enter_tree() called, platform: ", OS.get_name())
-	isReady = true
+	entered_tree = true
 	if OS.get_name() == Constants.PLATFORM_WEB:
 		WavedashJS = JavaScriptBridge.get_interface("WavedashJS")
 		if not WavedashJS:
@@ -91,7 +91,7 @@ func _enter_tree():
 		JavaScriptBridge.eval("window.WavedashJS.engineInstance.FS = FS;")
 
 func init(config: Dictionary):
-	assert(isReady, "WavedashSDK.init() called before WavedashSDK was added to the tree")
+	assert(entered_tree, "WavedashSDK.init() called before WavedashSDK was added to the tree")
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.init(JSON.stringify(config))
 
@@ -187,6 +187,8 @@ func leave_lobby(lobby_id: String):
 		WavedashJS.leaveLobby(lobby_id)
 		cached_lobby_id = ""
 		cached_lobby_host_id = ""
+		# Note: Don't emit lobby_left here - let JS event dispatch handle it
+		# This prevents duplicate signals when game calls leave_lobby()
 
 func list_available_lobbies():
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -289,31 +291,6 @@ func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel:
 		# Send to specific peer
 		return WavedashJS.sendP2PMessage(target_user_id, channel, reliable, js_buffer, payload_size)
 
-# Read P2P messages from the incoming queue for a specific channel
-# Use drain_p2p_channel instead for better performance
-func receive_p2p_messages_on_channel(channel: int, max_messages: int = 32) -> Array[Dictionary]:
-	if OS.get_name() != Constants.PLATFORM_WEB or not WavedashJS:
-		return []
-	
-	var messages: Array[Dictionary] = []
-	var messages_read = 0
-	
-	while messages_read < max_messages:
-		var p2p_packet: PackedByteArray = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.readP2PMessageFromChannel(channel))
-		# Empty response indicates the inbox is empty
-		if p2p_packet.size() == 0:
-			break
-		
-		# Decode the raw binary packet into identity, channel, and binary payload
-		var decoded: Dictionary = _decode_p2p_packet(p2p_packet)
-		# Empty dict means malformed packet (data.size() < 40), so skip it
-		if decoded:
-			messages.append(decoded)
-		
-		messages_read += 1
-	
-	return messages
-
 # Read all P2P messages from the incoming queue for a specific channel
 func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 	if OS.get_name() != Constants.PLATFORM_WEB or not WavedashJS:
@@ -358,7 +335,8 @@ func _on_lobby_created_gd(args):
 	cached_lobby_id = response["data"] if success else ""
 	cached_lobby_host_id = user_id if success else ""
 	lobby_created.emit(response)
-	lobby_joined.emit(response)
+	# Note: Don't emit lobby_joined here - let JS event dispatch handle it
+	# This prevents duplicate signals when game calls join_lobby()
 
 func _on_get_leaderboard_result_gd(args):
 	var response_json: String = args[0] if args.size() > 0 else null
@@ -498,7 +476,7 @@ func _decode_p2p_packet(data: PackedByteArray) -> Dictionary:
 	var from_user_bytes = data.slice(offset, offset + 32)
 	var from_user_str = from_user_bytes.get_string_from_ascii()
 	# Remove null padding (resize(32) fills with zeros)
-	var null_pos = from_user_str.find(char(0))
+	var null_pos = from_user_str.find(String.chr(0))
 	if null_pos != -1:
 		from_user_str = from_user_str.substr(0, null_pos)
 	result["identity"] = from_user_str
