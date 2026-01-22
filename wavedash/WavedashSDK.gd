@@ -331,8 +331,9 @@ func _on_lobby_left_gd(args):
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	print("[WavedashSDK] Lobby left: ", response)
-	cached_lobby_id = ""
-	cached_lobby_host_id = ""
+	if response.get("success", false):
+		cached_lobby_id = ""
+		cached_lobby_host_id = ""
 	lobby_left.emit(response)
 
 func _on_get_leaderboard_result_gd(args):
