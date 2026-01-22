@@ -414,12 +414,18 @@ func _dispatch_js_event(args):
 			# Reset lobby host, might have changed when users shuffled
 			cached_lobby_host_id = ""
 			lobby_users_updated.emit(data)
+		# All lobby join flows land here
+		# 1. create_lobby success -> LOBBY_JOINED with success=true
+		# 2. join_lobby success -> LOBBY_JOINED with success=true
+		# 3. External join (ie invite link) -> LOBBY_JOINED with success=true
+		# 4. join_lobby failure -> LOBBY_JOINED with success=false
 		Constants.JS_EVENT_LOBBY_JOINED:
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] Lobby joined: ", payload)
-			# Enriched signal payload: { lobbyId, hostId, users, metadata }
-			cached_lobby_id = data.get("lobbyId", "")
-			cached_lobby_host_id = data.get("hostId", "")
+			# Payload: { success, lobbyId, hostId?, users?, metadata?, message? }
+			if data.get("success", false):
+				cached_lobby_id = data.get("lobbyId", "")
+				cached_lobby_host_id = data.get("hostId", "")
 			lobby_joined.emit(data)
 		Constants.JS_EVENT_LOBBY_KICKED:
 			var data = JSON.parse_string(payload)
