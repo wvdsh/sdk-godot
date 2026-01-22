@@ -183,8 +183,6 @@ func join_lobby(lobby_id: String):
 func leave_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.leaveLobby(lobby_id).then(_on_lobby_left_js)
-		return true
-	return false
 
 func list_available_lobbies():
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
