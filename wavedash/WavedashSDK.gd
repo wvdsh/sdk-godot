@@ -22,8 +22,8 @@ var _js_callback_receiver : JavaScriptObject
 # Handle results when Godot calls async JS functions
 # GD -> JS (async) -> GD
 
-var _on_lobby_joined_js : JavaScriptObject
 var _on_lobby_created_js : JavaScriptObject
+var _on_lobby_left_js : JavaScriptObject
 var _on_get_leaderboard_result_js : JavaScriptObject
 var _on_post_leaderboard_score_result_js : JavaScriptObject
 var _on_get_leaderboard_entries_result_js : JavaScriptObject
@@ -71,9 +71,9 @@ func _enter_tree():
 			push_error("WavedashSDK: WavedashJS not found on window")
 			return
 		assert(WavedashJS.engineInstance != null, "WavedashSDK: WavedashJS.engineInstance not found on window. Call WavedashJS.setEngineInstance(engine) before calling engine.startGame()")
-		_on_lobby_joined_js = JavaScriptBridge.create_callback(_on_lobby_joined_gd)
 		_on_lobby_created_js = JavaScriptBridge.create_callback(_on_lobby_created_gd)
 		_on_get_leaderboard_result_js = JavaScriptBridge.create_callback(_on_get_leaderboard_result_gd)
+		_on_lobby_left_js = JavaScriptBridge.create_callback(_on_lobby_left_gd)
 		_on_get_leaderboard_entries_result_js = JavaScriptBridge.create_callback(_on_get_leaderboard_entries_result_gd)
 		_on_post_leaderboard_score_result_js = JavaScriptBridge.create_callback(_on_post_leaderboard_score_result_gd)
 		_on_create_ugc_item_result_js = JavaScriptBridge.create_callback(_on_create_ugc_item_result_gd)
@@ -178,17 +178,13 @@ func upload_remote_file(file_path: String):
 
 func join_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.joinLobby(lobby_id).then(_on_lobby_joined_js)
-		return true
-	return false
+		WavedashJS.joinLobby(lobby_id)
 
 func leave_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.leaveLobby(lobby_id)
-		cached_lobby_id = ""
-		cached_lobby_host_id = ""
-		# Note: Don't emit lobby_left here - let JS event dispatch handle it
-		# This prevents duplicate signals when game calls leave_lobby()
+		WavedashJS.leaveLobby(lobby_id).then(_on_lobby_left_js)
+		return true
+	return false
 
 func list_available_lobbies():
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -318,25 +314,26 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 	return messages
 
 # Handle callbacks triggered by Promises resolving
-func _on_lobby_joined_gd(args):
-	var lobby_json: String = args[0] if args.size() > 0 else null
-	var lobby_data: Dictionary = JSON.parse_string(lobby_json) if lobby_json else {}
-	var success: bool = lobby_data.get("success", false)
-	cached_lobby_id = lobby_data["data"] if success else ""
-	# Note: Don't emit lobby_joined here - let JS event dispatch handle it
-	# This prevents duplicate signals when game calls join_lobby()
-
 func _on_lobby_created_gd(args):
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	print("[WavedashSDK] Lobby created: ", response)
 	var success: bool = response.get("success", false)
-	# Creating a lobby means joining as host, cache our user id as host id
-	cached_lobby_id = response["data"] if success else ""
-	cached_lobby_host_id = user_id if success else ""
+	# Cache the lobbyId from the response (creating means we're the host)
+	if success:
+		cached_lobby_id = response.get("data", "")
+		cached_lobby_host_id = user_id
 	lobby_created.emit(response)
 	# Note: Don't emit lobby_joined here - let JS event dispatch handle it
-	# This prevents duplicate signals when game calls join_lobby()
+	# This prevents duplicate signals when game calls create_lobby()
+
+func _on_lobby_left_gd(args):
+	var response_json: String = args[0] if args.size() > 0 else null
+	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
+	print("[WavedashSDK] Lobby left: ", response)
+	cached_lobby_id = ""
+	cached_lobby_host_id = ""
+	lobby_left.emit(response)
 
 func _on_get_leaderboard_result_gd(args):
 	var response_json: String = args[0] if args.size() > 0 else null
@@ -420,18 +417,15 @@ func _dispatch_js_event(args):
 		Constants.JS_EVENT_LOBBY_JOINED:
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] Lobby joined: ", payload)
-			var success = data.get("success", false)
-			cached_lobby_id = data["data"] if success else ""
+			# Enriched signal payload: { lobbyId, hostId, users, metadata }
+			cached_lobby_id = data.get("lobbyId", "")
+			cached_lobby_host_id = data.get("hostId", "")
 			lobby_joined.emit(data)
-		Constants.JS_EVENT_LOBBY_LEFT:
-			var data = JSON.parse_string(payload)
-			print("[WavedashSDK] Lobby left: ", payload)
-			cached_lobby_id = ""
-			cached_lobby_host_id = ""
-			lobby_left.emit(data)
 		Constants.JS_EVENT_LOBBY_KICKED:
 			var data = JSON.parse_string(payload)
-			print("[WavedashSDK] Lobby kicked: ", payload)
+			# payload: { lobbyId, reason }
+			var reason = data.get("reason", Constants.LOBBY_KICKED_REASON_KICKED)
+			print("[WavedashSDK] Lobby kicked (reason: %s): %s" % [reason, payload])
 			cached_lobby_id = ""
 			cached_lobby_host_id = ""
 			lobby_kicked.emit(data)
