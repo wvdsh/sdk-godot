@@ -329,7 +329,8 @@ func _on_lobby_left_gd(args):
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	print("[WavedashSDK] Lobby left: ", response)
-	if response.get("success", false):
+	# Only clear cache if we left the lobby we're currently in (not if we already joined a new one)
+	if response.get("success", false) and response.get("data", "") == cached_lobby_id:
 		cached_lobby_id = ""
 		cached_lobby_host_id = ""
 	lobby_left.emit(response)
