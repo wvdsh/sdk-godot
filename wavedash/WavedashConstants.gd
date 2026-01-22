@@ -9,7 +9,6 @@ const LOBBY_TYPE_PRIVATE = 2
 const JS_EVENT_LOBBY_MESSAGE = "LobbyMessage"
 const JS_EVENT_LOBBY_JOINED = "LobbyJoined"
 const JS_EVENT_LOBBY_KICKED = "LobbyKicked"
-const JS_EVENT_LOBBY_LEFT = "LobbyLeft"
 const JS_EVENT_LOBBY_USERS_UPDATED = "LobbyUsersUpdated"
 const JS_EVENT_LOBBY_DATA_UPDATED = "LobbyDataUpdated"
 const JS_EVENT_P2P_CONNECTION_ESTABLISHED = "P2PConnectionEstablished"
@@ -58,6 +57,10 @@ const LOBBY_USER_JOINED = "JOINED"
 const LOBBY_USER_LEFT = "LEFT"
 const LOBBY_USER_KICKED = "KICKED"
 const LOBBY_USER_BANNED = "BANNED"
+
+# Lobby Kicked Reasons
+const LOBBY_KICKED_REASON_KICKED = "KICKED"
+const LOBBY_KICKED_REASON_ERROR = "ERROR"
 
 
 # API Call Result Codes (HTTP Status Codes)

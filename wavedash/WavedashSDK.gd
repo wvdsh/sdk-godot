@@ -10,7 +10,7 @@ var WavedashJS : JavaScriptObject
 # Cache what we can so the next call doesn't have to wait for JS
 var user_id : String = ""
 var username : String = ""
-var isReady: bool = false
+var entered_tree: bool = false
 
 var cached_lobby_host_id : String = ""
 var cached_lobby_id : String = ""
@@ -22,8 +22,8 @@ var _js_callback_receiver : JavaScriptObject
 # Handle results when Godot calls async JS functions
 # GD -> JS (async) -> GD
 
-var _on_lobby_joined_js : JavaScriptObject
 var _on_lobby_created_js : JavaScriptObject
+var _on_lobby_left_js : JavaScriptObject
 var _on_get_leaderboard_result_js : JavaScriptObject
 var _on_post_leaderboard_score_result_js : JavaScriptObject
 var _on_get_leaderboard_entries_result_js : JavaScriptObject
@@ -64,16 +64,16 @@ signal backend_disconnected(payload)
 
 func _enter_tree():
 	print("WavedashSDK._enter_tree() called, platform: ", OS.get_name())
-	isReady = true
+	entered_tree = true
 	if OS.get_name() == Constants.PLATFORM_WEB:
 		WavedashJS = JavaScriptBridge.get_interface("WavedashJS")
 		if not WavedashJS:
 			push_error("WavedashSDK: WavedashJS not found on window")
 			return
 		assert(WavedashJS.engineInstance != null, "WavedashSDK: WavedashJS.engineInstance not found on window. Call WavedashJS.setEngineInstance(engine) before calling engine.startGame()")
-		_on_lobby_joined_js = JavaScriptBridge.create_callback(_on_lobby_joined_gd)
 		_on_lobby_created_js = JavaScriptBridge.create_callback(_on_lobby_created_gd)
 		_on_get_leaderboard_result_js = JavaScriptBridge.create_callback(_on_get_leaderboard_result_gd)
+		_on_lobby_left_js = JavaScriptBridge.create_callback(_on_lobby_left_gd)
 		_on_get_leaderboard_entries_result_js = JavaScriptBridge.create_callback(_on_get_leaderboard_entries_result_gd)
 		_on_post_leaderboard_score_result_js = JavaScriptBridge.create_callback(_on_post_leaderboard_score_result_gd)
 		_on_create_ugc_item_result_js = JavaScriptBridge.create_callback(_on_create_ugc_item_result_gd)
@@ -91,7 +91,7 @@ func _enter_tree():
 		JavaScriptBridge.eval("window.WavedashJS.engineInstance.FS = FS;")
 
 func init(config: Dictionary):
-	assert(isReady, "WavedashSDK.init() called before WavedashSDK was added to the tree")
+	assert(entered_tree, "WavedashSDK.init() called before WavedashSDK was added to the tree")
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.init(JSON.stringify(config))
 
@@ -178,15 +178,11 @@ func upload_remote_file(file_path: String):
 
 func join_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.joinLobby(lobby_id).then(_on_lobby_joined_js)
-		return true
-	return false
+		WavedashJS.joinLobby(lobby_id)
 
 func leave_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.leaveLobby(lobby_id)
-		cached_lobby_id = ""
-		cached_lobby_host_id = ""
+		WavedashJS.leaveLobby(lobby_id).then(_on_lobby_left_js)
 
 func list_available_lobbies():
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -289,31 +285,6 @@ func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel:
 		# Send to specific peer
 		return WavedashJS.sendP2PMessage(target_user_id, channel, reliable, js_buffer, payload_size)
 
-# Read P2P messages from the incoming queue for a specific channel
-# Use drain_p2p_channel instead for better performance
-func receive_p2p_messages_on_channel(channel: int, max_messages: int = 32) -> Array[Dictionary]:
-	if OS.get_name() != Constants.PLATFORM_WEB or not WavedashJS:
-		return []
-	
-	var messages: Array[Dictionary] = []
-	var messages_read = 0
-	
-	while messages_read < max_messages:
-		var p2p_packet: PackedByteArray = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.readP2PMessageFromChannel(channel))
-		# Empty response indicates the inbox is empty
-		if p2p_packet.size() == 0:
-			break
-		
-		# Decode the raw binary packet into identity, channel, and binary payload
-		var decoded: Dictionary = _decode_p2p_packet(p2p_packet)
-		# Empty dict means malformed packet (data.size() < 40), so skip it
-		if decoded:
-			messages.append(decoded)
-		
-		messages_read += 1
-	
-	return messages
-
 # Read all P2P messages from the incoming queue for a specific channel
 func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 	if OS.get_name() != Constants.PLATFORM_WEB or not WavedashJS:
@@ -341,24 +312,27 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 	return messages
 
 # Handle callbacks triggered by Promises resolving
-func _on_lobby_joined_gd(args):
-	var lobby_json: String = args[0] if args.size() > 0 else null
-	var lobby_data: Dictionary = JSON.parse_string(lobby_json) if lobby_json else {}
-	var success: bool = lobby_data.get("success", false)
-	cached_lobby_id = lobby_data["data"] if success else ""
-	# Note: Don't emit lobby_joined here - let JS event dispatch handle it
-	# This prevents duplicate signals when game calls join_lobby()
-
 func _on_lobby_created_gd(args):
 	var response_json: String = args[0] if args.size() > 0 else null
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	print("[WavedashSDK] Lobby created: ", response)
 	var success: bool = response.get("success", false)
-	# Creating a lobby means joining as host, cache our user id as host id
-	cached_lobby_id = response["data"] if success else ""
-	cached_lobby_host_id = user_id if success else ""
+	# Cache the lobbyId from the response (creating means we're the host)
+	if success:
+		cached_lobby_id = response.get("data", "")
+		cached_lobby_host_id = user_id
 	lobby_created.emit(response)
-	lobby_joined.emit(response)
+	# Note: Don't emit lobby_joined here - let JS event dispatch handle it
+	# This prevents duplicate signals when game calls create_lobby()
+
+func _on_lobby_left_gd(args):
+	var response_json: String = args[0] if args.size() > 0 else null
+	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
+	print("[WavedashSDK] Lobby left: ", response)
+	if response.get("success", false):
+		cached_lobby_id = ""
+		cached_lobby_host_id = ""
+	lobby_left.emit(response)
 
 func _on_get_leaderboard_result_gd(args):
 	var response_json: String = args[0] if args.size() > 0 else null
@@ -442,18 +416,15 @@ func _dispatch_js_event(args):
 		Constants.JS_EVENT_LOBBY_JOINED:
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] Lobby joined: ", payload)
-			var success = data.get("success", false)
-			cached_lobby_id = data["data"] if success else ""
+			# Enriched signal payload: { lobbyId, hostId, users, metadata }
+			cached_lobby_id = data.get("lobbyId", "")
+			cached_lobby_host_id = data.get("hostId", "")
 			lobby_joined.emit(data)
-		Constants.JS_EVENT_LOBBY_LEFT:
-			var data = JSON.parse_string(payload)
-			print("[WavedashSDK] Lobby left: ", payload)
-			cached_lobby_id = ""
-			cached_lobby_host_id = ""
-			lobby_left.emit(data)
 		Constants.JS_EVENT_LOBBY_KICKED:
 			var data = JSON.parse_string(payload)
-			print("[WavedashSDK] Lobby kicked: ", payload)
+			# payload: { lobbyId, reason }
+			var reason = data.get("reason", Constants.LOBBY_KICKED_REASON_KICKED)
+			print("[WavedashSDK] Lobby kicked (reason: %s): %s" % [reason, payload])
 			cached_lobby_id = ""
 			cached_lobby_host_id = ""
 			lobby_kicked.emit(data)
@@ -498,7 +469,7 @@ func _decode_p2p_packet(data: PackedByteArray) -> Dictionary:
 	var from_user_bytes = data.slice(offset, offset + 32)
 	var from_user_str = from_user_bytes.get_string_from_ascii()
 	# Remove null padding (resize(32) fills with zeros)
-	var null_pos = from_user_str.find(char(0))
+	var null_pos = from_user_str.find(String.chr(0))
 	if null_pos != -1:
 		from_user_str = from_user_str.substr(0, null_pos)
 	result["identity"] = from_user_str
