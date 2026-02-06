@@ -35,6 +35,7 @@ var _on_upload_remote_file_result_js : JavaScriptObject
 var _on_download_remote_directory_result_js : JavaScriptObject
 var _on_get_lobbies_result_js : JavaScriptObject
 var _on_request_stats_result_js : JavaScriptObject
+var _on_sent_lobby_invite_js : JavaScriptObject
 
 # Signals that Godot developers can connect to
 signal lobby_joined(payload)
@@ -44,6 +45,8 @@ signal lobby_left(payload)
 signal lobby_data_updated(payload)
 signal lobby_users_updated(payload)
 signal lobby_kicked(payload)
+signal lobby_invite(payload)
+signal sent_lobby_invite(payload)
 signal got_lobbies(payload)
 signal got_leaderboard(payload)
 signal got_leaderboard_entries(payload)
@@ -84,6 +87,7 @@ func _enter_tree():
 		_on_upload_remote_file_result_js = JavaScriptBridge.create_callback(_on_upload_remote_file_result_gd)
 		_on_get_lobbies_result_js = JavaScriptBridge.create_callback(_on_get_lobbies_result_gd)
 		_on_request_stats_result_js = JavaScriptBridge.create_callback(_on_request_stats_result_gd)
+		_on_sent_lobby_invite_js = JavaScriptBridge.create_callback(_on_sent_lobby_invite_gd)
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
 		WavedashJS.engineInstance["type"] = Constants.ENGINE_GODOT
 		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
@@ -148,13 +152,11 @@ func get_leaderboard_entry_count(leaderboard_id: String) -> int:
 
 func get_leaderboard_entries_around_player(leaderboard_id: String, count_ahead: int, count_behind: int, friends_only: bool):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		# TODO: Support friends_only functionality
-		WavedashJS.listLeaderboardEntriesAroundUser(leaderboard_id, count_ahead, count_behind).then(_on_get_leaderboard_entries_result_js)
+		WavedashJS.listLeaderboardEntriesAroundUser(leaderboard_id, count_ahead, count_behind, friends_only).then(_on_get_leaderboard_entries_result_js)
 
 func get_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, friends_only: bool):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		# TODO: Support friends_only functionality
-		WavedashJS.listLeaderboardEntries(leaderboard_id, offset, limit).then(_on_get_leaderboard_entries_result_js)
+		WavedashJS.listLeaderboardEntries(leaderboard_id, offset, limit, friends_only).then(_on_get_leaderboard_entries_result_js)
 
 func post_leaderboard_score(leaderboard_id: String, score: int, keep_best: bool, ugc_id: String = ""):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -228,6 +230,10 @@ func send_lobby_chat_message(lobby_id: String, message: String):
 		# Fire and forget
 		return WavedashJS.sendLobbyMessage(lobby_id, message)
 	return false
+
+func invite_user_to_lobby(lobby_id: String, user_id_to_invite: String):
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.inviteUserToLobby(lobby_id, user_id_to_invite).then(_on_sent_lobby_invite_js)
 
 # User Generated Content (UGC) functions
 func create_ugc_item(ugcType: int, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
@@ -394,6 +400,12 @@ func _on_request_stats_result_gd(args):
 	print("[WavedashSDK] Got stats: ", response)
 	current_stats_received.emit(response)
 
+func _on_sent_lobby_invite_gd(args):
+	var response_json: String = args[0] if args.size() > 0 else null
+	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
+	print("[WavedashSDK] Sent lobby invite: ", response)
+	sent_lobby_invite.emit(response)
+
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
 	var _game_object_name = args[0]  # Unused in Godot. Needed for Unity
@@ -435,6 +447,10 @@ func _dispatch_js_event(args):
 			cached_lobby_id = ""
 			cached_lobby_host_id = ""
 			lobby_kicked.emit(data)
+		Constants.JS_EVENT_LOBBY_INVITE:
+			var data = JSON.parse_string(payload)
+			print("[WavedashSDK] Lobby invite: ", payload)
+			lobby_invite.emit(data)
 		Constants.JS_EVENT_P2P_CONNECTION_ESTABLISHED:
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] P2P connection established: ", payload)
@@ -472,14 +488,13 @@ func _decode_p2p_packet(data: PackedByteArray) -> Dictionary:
 	var result = {}
 	var offset = 0
 	
-	# fromUserId (32 bytes)
+	# fromUserId (32 bytes, null-padded)
 	var from_user_bytes = data.slice(offset, offset + 32)
-	var from_user_str = from_user_bytes.get_string_from_ascii()
-	# Remove null padding (resize(32) fills with zeros)
-	var null_pos = from_user_str.find(String.chr(0))
+	# Find first null byte to avoid Godot's Unicode warning when converting
+	var null_pos = from_user_bytes.find(0)
 	if null_pos != -1:
-		from_user_str = from_user_str.substr(0, null_pos)
-	result["identity"] = from_user_str
+		from_user_bytes = from_user_bytes.slice(0, null_pos)
+	result["identity"] = from_user_bytes.get_string_from_ascii()
 	offset += 32
 	
 	# channel (4 bytes, little-endian)
