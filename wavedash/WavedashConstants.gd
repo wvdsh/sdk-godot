@@ -9,6 +9,7 @@ const LOBBY_TYPE_PRIVATE = 2
 const JS_EVENT_LOBBY_MESSAGE = "LobbyMessage"
 const JS_EVENT_LOBBY_JOINED = "LobbyJoined"
 const JS_EVENT_LOBBY_KICKED = "LobbyKicked"
+const JS_EVENT_LOBBY_INVITE = "LobbyInvite"
 const JS_EVENT_LOBBY_USERS_UPDATED = "LobbyUsersUpdated"
 const JS_EVENT_LOBBY_DATA_UPDATED = "LobbyDataUpdated"
 const JS_EVENT_P2P_CONNECTION_ESTABLISHED = "P2PConnectionEstablished"
