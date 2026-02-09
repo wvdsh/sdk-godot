@@ -48,6 +48,11 @@ const UGC_VISIBILITY_PUBLIC = 0
 const UGC_VISIBILITY_FRIENDS_ONLY = 1
 const UGC_VISIBILITY_PRIVATE = 2
 
+# Avatar Sizes
+const AVATAR_SIZE_SMALL = 0   # 64x64 - Lists, chat bubbles
+const AVATAR_SIZE_MEDIUM = 1  # 128x128 - Profile cards
+const AVATAR_SIZE_LARGE = 2   # 256x256 - Large displays
+
 # Lobby Visibility
 const LOBBY_VISIBILITY_PUBLIC = 0
 const LOBBY_VISIBILITY_FRIENDS_ONLY = 1

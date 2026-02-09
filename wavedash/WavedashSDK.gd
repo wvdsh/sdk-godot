@@ -36,6 +36,7 @@ var _on_download_remote_directory_result_js : JavaScriptObject
 var _on_get_lobbies_result_js : JavaScriptObject
 var _on_request_stats_result_js : JavaScriptObject
 var _on_sent_lobby_invite_js : JavaScriptObject
+var _on_list_friends_result_js : JavaScriptObject
 
 # Signals that Godot developers can connect to
 signal lobby_joined(payload)
@@ -64,6 +65,8 @@ signal current_stats_received(payload)
 signal backend_connected(payload)
 signal backend_reconnecting(payload)
 signal backend_disconnected(payload)
+signal user_avatar_loaded(texture: Texture2D, user_id: String)
+signal got_friends(payload)
 
 func _enter_tree():
 	print("WavedashSDK._enter_tree() called, platform: ", OS.get_name())
@@ -88,6 +91,7 @@ func _enter_tree():
 		_on_get_lobbies_result_js = JavaScriptBridge.create_callback(_on_get_lobbies_result_gd)
 		_on_request_stats_result_js = JavaScriptBridge.create_callback(_on_request_stats_result_gd)
 		_on_sent_lobby_invite_js = JavaScriptBridge.create_callback(_on_sent_lobby_invite_gd)
+		_on_list_friends_result_js = JavaScriptBridge.create_callback(_on_list_friends_result_gd)
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
 		WavedashJS.engineInstance["type"] = Constants.ENGINE_GODOT
 		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
@@ -123,13 +127,68 @@ func get_user_id() -> String:
 func get_username() -> String:
 	if username != "":
 		return username
-		
+
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		var user_data = JSON.parse_string(WavedashJS.getUser())
 		username = user_data["username"]
 		return username
-	
+
 	return ""
+
+## Returns the CDN URL for a cached user's avatar with size transformation.
+## Users are cached when seen via friends list or lobby membership.
+## Returns empty string if user not cached or has no avatar.
+func get_user_avatar_url(user_id_to_fetch: String, size: int = Constants.AVATAR_SIZE_MEDIUM) -> String:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		var result = WavedashJS.getUserAvatarUrl(user_id_to_fetch, size)
+		return result if result else ""
+	return ""
+
+## Fetches avatar for a user and emits user_avatar_loaded signal when complete.
+## Users must be cached (seen via friends list or lobby membership) for this to work.
+## Emits user_avatar_loaded(texture, user_id) - texture is null on failure.
+func get_user_avatar(user_id_to_fetch: String, size: int = Constants.AVATAR_SIZE_MEDIUM) -> void:
+	var url = get_user_avatar_url(user_id_to_fetch, size)
+	if url.is_empty():
+		user_avatar_loaded.emit(null, user_id_to_fetch)
+		return
+
+	var http = HTTPRequest.new()
+	add_child(http)
+	http.request_completed.connect(_on_avatar_request_completed.bind(user_id_to_fetch, http))
+	var error = http.request(url)
+	if error != OK:
+		push_warning("Failed to start avatar request for user: " + user_id_to_fetch)
+		http.queue_free()
+		user_avatar_loaded.emit(null, user_id_to_fetch)
+
+func _on_avatar_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, avatar_user_id: String, http: HTTPRequest) -> void:
+	http.queue_free()
+	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
+		push_warning("Failed to load avatar for user: " + avatar_user_id)
+		user_avatar_loaded.emit(null, avatar_user_id)
+		return
+
+	var image = Image.new()
+	var err = image.load_png_from_buffer(body)
+	if err != OK:
+		err = image.load_jpg_from_buffer(body)
+	if err != OK:
+		err = image.load_webp_from_buffer(body)
+
+	if err == OK:
+		var texture = ImageTexture.create_from_image(image)
+		user_avatar_loaded.emit(texture, avatar_user_id)
+	else:
+		push_warning("Failed to decode avatar for user: " + avatar_user_id)
+		user_avatar_loaded.emit(null, avatar_user_id)
+
+## Lists the current user's friends.
+## Emits got_friends signal with response containing: userId, username, avatarUrl (optional), isOnline.
+## Friends are automatically cached for avatar lookups via get_user_avatar_url/get_user_avatar.
+func list_friends() -> void:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.listFriends().then(_on_list_friends_result_js)
 
 func get_leaderboard(leaderboard_name: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -405,6 +464,12 @@ func _on_sent_lobby_invite_gd(args):
 	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
 	print("[WavedashSDK] Sent lobby invite: ", response)
 	sent_lobby_invite.emit(response)
+
+func _on_list_friends_result_gd(args):
+	var response_json: String = args[0] if args.size() > 0 else null
+	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
+	print("[WavedashSDK] Got friends: ", response)
+	got_friends.emit(response)
 
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
