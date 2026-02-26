@@ -225,16 +225,29 @@ func create_lobby(lobby_type: int, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.createLobby(lobby_type, max_players).then(_on_lobby_created_js)
 
+func _validate_user_data_path(path: String, func_name: String) -> bool:
+	var user_data_dir = OS.get_user_data_dir()
+	if not path.begins_with(user_data_dir):
+		push_error("[WavedashSDK] %s: file_path must be an absolute path starting with OS.get_user_data_dir() ('%s'). Got: '%s'" % [func_name, user_data_dir, path])
+		return false
+	return true
+
 func download_remote_directory(path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		if not _validate_user_data_path(path, "download_remote_directory"):
+			return
 		WavedashJS.downloadRemoteDirectory(path).then(_on_download_remote_directory_result_js)
 
 func download_remote_file(file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		if not _validate_user_data_path(file_path, "download_remote_file"):
+			return
 		WavedashJS.downloadRemoteFile(file_path).then(_on_download_remote_file_result_js)
 
 func upload_remote_file(file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		if not _validate_user_data_path(file_path, "upload_remote_file"):
+			return
 		WavedashJS.uploadRemoteFile(file_path).then(_on_upload_remote_file_result_js)
 
 func join_lobby(lobby_id: String):
@@ -297,12 +310,16 @@ func invite_user_to_lobby(lobby_id: String, user_id_to_invite: String):
 # User Generated Content (UGC) functions
 func create_ugc_item(ugcType: int, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		if local_file_path != null and not _validate_user_data_path(local_file_path, "create_ugc_item"):
+			return
 		# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
 		# Faster, no I/O, saves the file system sync overhead
 		WavedashJS.createUGCItem(ugcType, title, description, visibility, local_file_path).then(_on_create_ugc_item_result_js)
 
 func update_ugc_item(ugc_id: String, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		if local_file_path != null and not _validate_user_data_path(local_file_path, "update_ugc_item"):
+			return
 		# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
 		# Faster, no I/O, saves the file system sync overhead
 		WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path).then(_on_update_ugc_item_result_js)
@@ -310,6 +327,8 @@ func update_ugc_item(ugc_id: String, title: String = "", description: String = "
 # Download the given UGC item to the given local file path
 func download_ugc_item(ugc_id: String, local_file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		if not _validate_user_data_path(local_file_path, "download_ugc_item"):
+			return
 		WavedashJS.downloadUGCItem(ugc_id, local_file_path).then(_on_download_ugc_item_result_js)
 
 # P2P messaging
