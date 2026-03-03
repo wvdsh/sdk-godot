@@ -390,7 +390,6 @@ func download_ugc_item(ugc_id: String, local_file_path: String):
 	else:
 		ugc_item_downloaded.emit(_web_unsupported("download_ugc_item"))
 	return await ugc_item_downloaded
-	return await ugc_item_downloaded
 
 # P2P messaging
 # Send a P2P message from Godot. JS will only send the message if the peer is ready to receive
