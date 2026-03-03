@@ -68,6 +68,9 @@ signal backend_disconnected(payload)
 signal user_avatar_loaded(texture: Texture2D, user_id: String)
 signal got_friends(payload)
 
+func _web_unsupported(method_name: String) -> Dictionary:
+	return {"success": false, "data": null, "message": "%s is only supported in Web builds" % method_name}
+
 func _enter_tree():
 	print("WavedashSDK._enter_tree() called, platform: ", OS.get_name())
 	entered_tree = true
@@ -186,21 +189,33 @@ func _on_avatar_request_completed(result: int, response_code: int, _headers: Pac
 ## Lists the current user's friends.
 ## Emits got_friends signal with response containing: userId, username, avatarUrl (optional), isOnline.
 ## Friends are automatically cached for avatar lookups via get_user_avatar_url/get_user_avatar.
-func list_friends() -> void:
+func list_friends():
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.listFriends().then(_on_list_friends_result_js)
+	else:
+		got_friends.emit(_web_unsupported("list_friends"))
+	return await got_friends
 
 func get_leaderboard(leaderboard_name: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.getLeaderboard(leaderboard_name).then(_on_get_leaderboard_result_js)
+	else:
+		got_leaderboard.emit(_web_unsupported("get_leaderboard"))
+	return await got_leaderboard
 
 func get_or_create_leaderboard(leaderboard_name: String, sort_method: int, display_type: int):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.getOrCreateLeaderboard(leaderboard_name, sort_method, display_type).then(_on_get_leaderboard_result_js)
+	else:
+		got_leaderboard.emit(_web_unsupported("get_or_create_leaderboard"))
+	return await got_leaderboard
 
 func get_my_leaderboard_entries(leaderboard_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.getMyLeaderboardEntries(leaderboard_id).then(_on_get_leaderboard_entries_result_js)
+	else:
+		got_leaderboard_entries.emit(_web_unsupported("get_my_leaderboard_entries"))
+	return await got_leaderboard_entries
 
 func get_leaderboard_entry_count(leaderboard_id: String) -> int:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -212,18 +227,30 @@ func get_leaderboard_entry_count(leaderboard_id: String) -> int:
 func get_leaderboard_entries_around_player(leaderboard_id: String, count_ahead: int, count_behind: int, friends_only: bool):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.listLeaderboardEntriesAroundUser(leaderboard_id, count_ahead, count_behind, friends_only).then(_on_get_leaderboard_entries_result_js)
+	else:
+		got_leaderboard_entries.emit(_web_unsupported("get_leaderboard_entries_around_player"))
+	return await got_leaderboard_entries
 
 func get_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, friends_only: bool):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.listLeaderboardEntries(leaderboard_id, offset, limit, friends_only).then(_on_get_leaderboard_entries_result_js)
+	else:
+		got_leaderboard_entries.emit(_web_unsupported("get_leaderboard_entries"))
+	return await got_leaderboard_entries
 
 func post_leaderboard_score(leaderboard_id: String, score: int, keep_best: bool, ugc_id: String = ""):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.uploadLeaderboardScore(leaderboard_id, score, keep_best, ugc_id).then(_on_post_leaderboard_score_result_js)
+	else:
+		posted_leaderboard_score.emit(_web_unsupported("post_leaderboard_score"))
+	return await posted_leaderboard_score
 
 func create_lobby(lobby_type: int, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.createLobby(lobby_type, max_players).then(_on_lobby_created_js)
+	else:
+		lobby_created.emit(_web_unsupported("create_lobby"))
+	return await lobby_created
 
 func _validate_user_data_path(path: String, func_name: String) -> bool:
 	var user_data_dir = OS.get_user_data_dir()
@@ -234,21 +261,33 @@ func _validate_user_data_path(path: String, func_name: String) -> bool:
 
 func download_remote_directory(path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		if not _validate_user_data_path(path, "download_remote_directory"):
-			return
-		WavedashJS.downloadRemoteDirectory(path).then(_on_download_remote_directory_result_js)
+		if _validate_user_data_path(path, "download_remote_directory"):
+			WavedashJS.downloadRemoteDirectory(path).then(_on_download_remote_directory_result_js)
+		else:
+			remote_directory_downloaded.emit({"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"})
+	else:
+		remote_directory_downloaded.emit(_web_unsupported("download_remote_directory"))
+	return await remote_directory_downloaded
 
 func download_remote_file(file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		if not _validate_user_data_path(file_path, "download_remote_file"):
-			return
-		WavedashJS.downloadRemoteFile(file_path).then(_on_download_remote_file_result_js)
+		if _validate_user_data_path(file_path, "download_remote_file"):
+			WavedashJS.downloadRemoteFile(file_path).then(_on_download_remote_file_result_js)
+		else:
+			remote_file_downloaded.emit({"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"})
+	else:
+		remote_file_downloaded.emit(_web_unsupported("download_remote_file"))
+	return await remote_file_downloaded
 
 func upload_remote_file(file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		if not _validate_user_data_path(file_path, "upload_remote_file"):
-			return
-		WavedashJS.uploadRemoteFile(file_path).then(_on_upload_remote_file_result_js)
+		if _validate_user_data_path(file_path, "upload_remote_file"):
+			WavedashJS.uploadRemoteFile(file_path).then(_on_upload_remote_file_result_js)
+		else:
+			remote_file_uploaded.emit({"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"})
+	else:
+		remote_file_uploaded.emit(_web_unsupported("upload_remote_file"))
+	return await remote_file_uploaded
 
 func join_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -257,10 +296,16 @@ func join_lobby(lobby_id: String):
 func leave_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.leaveLobby(lobby_id).then(_on_lobby_left_js)
+	else:
+		lobby_left.emit(_web_unsupported("leave_lobby"))
+	return await lobby_left
 
 func list_available_lobbies():
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.listAvailableLobbies().then(_on_get_lobbies_result_js)
+	else:
+		got_lobbies.emit(_web_unsupported("list_available_lobbies"))
+	return await got_lobbies
 
 func get_lobby_host_id(lobby_id: String) -> String:
 	if lobby_id == "":
@@ -306,30 +351,45 @@ func send_lobby_chat_message(lobby_id: String, message: String):
 func invite_user_to_lobby(lobby_id: String, user_id_to_invite: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.inviteUserToLobby(lobby_id, user_id_to_invite).then(_on_sent_lobby_invite_js)
+	else:
+		sent_lobby_invite.emit(_web_unsupported("invite_user_to_lobby"))
+	return await sent_lobby_invite
 
 # User Generated Content (UGC) functions
 func create_ugc_item(ugcType: int, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if local_file_path != null and not _validate_user_data_path(local_file_path, "create_ugc_item"):
-			return
-		# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
-		# Faster, no I/O, saves the file system sync overhead
-		WavedashJS.createUGCItem(ugcType, title, description, visibility, local_file_path).then(_on_create_ugc_item_result_js)
+			ugc_item_created.emit({"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"})
+		else:
+			# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
+			# Faster, no I/O, saves the file system sync overhead
+			WavedashJS.createUGCItem(ugcType, title, description, visibility, local_file_path).then(_on_create_ugc_item_result_js)
+	else:
+		ugc_item_created.emit(_web_unsupported("create_ugc_item"))
+	return await ugc_item_created
 
 func update_ugc_item(ugc_id: String, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if local_file_path != null and not _validate_user_data_path(local_file_path, "update_ugc_item"):
-			return
-		# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
-		# Faster, no I/O, saves the file system sync overhead
-		WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path).then(_on_update_ugc_item_result_js)
+			ugc_item_updated.emit({"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"})
+		else:
+			# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
+			# Faster, no I/O, saves the file system sync overhead
+			WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path).then(_on_update_ugc_item_result_js)
+	else:
+		ugc_item_updated.emit(_web_unsupported("update_ugc_item"))
+	return await ugc_item_updated
 
 # Download the given UGC item to the given local file path
 func download_ugc_item(ugc_id: String, local_file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		if not _validate_user_data_path(local_file_path, "download_ugc_item"):
-			return
-		WavedashJS.downloadUGCItem(ugc_id, local_file_path).then(_on_download_ugc_item_result_js)
+		if _validate_user_data_path(local_file_path, "download_ugc_item"):
+			WavedashJS.downloadUGCItem(ugc_id, local_file_path).then(_on_download_ugc_item_result_js)
+		else:
+			ugc_item_downloaded.emit({"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"})
+	else:
+		ugc_item_downloaded.emit(_web_unsupported("download_ugc_item"))
+	return await ugc_item_downloaded
 
 # P2P messaging
 # Send a P2P message from Godot. JS will only send the message if the peer is ready to receive
@@ -598,9 +658,12 @@ func _decode_p2p_packet(data: PackedByteArray) -> Dictionary:
 	
 	return result
 	
-func request_stats() -> void:
-	if OS.get_name() == Constants.PLATFORM_WEB:
+func request_stats():
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.requestStats().then(_on_request_stats_result_js)
+	else:
+		current_stats_received.emit(_web_unsupported("request_stats"))
+	return await current_stats_received
 
 func set_stat_int(stat_name:String, val:int, store_now:bool) -> void:
 	if OS.get_name() == Constants.PLATFORM_WEB:
