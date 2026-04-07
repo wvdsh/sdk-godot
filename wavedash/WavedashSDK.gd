@@ -301,9 +301,14 @@ func upload_remote_file(file_path: String):
 		remote_file_uploaded.emit(result)
 		return result
 
+# Simply returns a boolean indicating success or failure
+# For the full lobby join payload, connect to the lobby_joined signal
+# lobby_joined signal triggers even when lobby is joined externally via Wavedash UI
 func join_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.joinLobby(lobby_id)
+		var result = await _invoke_js(WavedashJS.joinLobby(lobby_id))
+		return result.get("success", false)
+	return false
 
 func leave_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -424,6 +429,37 @@ func download_ugc_item(ugc_id: String, local_file_path: String):
 		ugc_item_downloaded.emit(result)
 		return result
 
+func request_stats():
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		var result = await _invoke_js(WavedashJS.requestStats())
+		current_stats_received.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("request_stats")
+		current_stats_received.emit(result)
+		return result
+
+func set_stat_int(stat_name:String, val:int, store_now:bool) -> void:
+	if OS.get_name() == Constants.PLATFORM_WEB:
+		WavedashJS.setStat(stat_name, val)
+		if store_now:
+			WavedashJS.storeStats()
+
+func get_stat_int(stat_name: String) -> int:
+	if OS.get_name() == Constants.PLATFORM_WEB:
+		return WavedashJS.getStat(stat_name)
+	return -1
+
+func set_achievement(ach_name:String) -> void:
+	if OS.get_name() == Constants.PLATFORM_WEB:
+		WavedashJS.setAchievement(ach_name)
+		WavedashJS.storeStats()
+	
+func get_achievement(ach_name:String) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.getAchievement(ach_name)
+	return false
+
 # P2P messaging
 # Send a P2P message from Godot. JS will only send the message if the peer is ready to receive
 func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel: int = 0, reliable: bool = true) -> bool:
@@ -512,6 +548,7 @@ func _invoke_js(js_promise):
 	js_promise.then(_create_js_callback(req_id))
 	return await _await_request(req_id)
 
+
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
 	var _game_object_name = args[0]  # Unused in Godot. Needed for Unity
@@ -533,17 +570,15 @@ func _dispatch_js_event(args):
 			cached_lobby_host_id = ""
 			lobby_users_updated.emit(data)
 		# All lobby join flows land here
-		# 1. create_lobby success -> LOBBY_JOINED with success=true
-		# 2. join_lobby success -> LOBBY_JOINED with success=true
-		# 3. External join (ie invite link) -> LOBBY_JOINED with success=true
-		# 4. join_lobby failure -> LOBBY_JOINED with success=false
+		# 1. create_lobby success -> LOBBY_JOINED
+		# 2. join_lobby success -> LOBBY_JOINED
+		# 3. External join (ie invite link) -> LOBBY_JOINED
 		Constants.JS_EVENT_LOBBY_JOINED:
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] Lobby joined: ", payload)
-			# Payload: { success, lobbyId, hostId?, users?, metadata?, message? }
-			if data.get("success", false):
-				cached_lobby_id = data.get("lobbyId", "")
-				cached_lobby_host_id = data.get("hostId", "")
+			# Payload: { lobbyId, hostId, users, metadata }
+			cached_lobby_id = data.get("lobbyId", "")
+			cached_lobby_host_id = data.get("hostId", "")
 			lobby_joined.emit(data)
 		Constants.JS_EVENT_LOBBY_KICKED:
 			var data = JSON.parse_string(payload)
@@ -619,34 +654,3 @@ func _decode_p2p_packet(data: PackedByteArray) -> Dictionary:
 		result["payload"] = PackedByteArray()
 	
 	return result
-	
-func request_stats():
-	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		var result = await _invoke_js(WavedashJS.requestStats())
-		current_stats_received.emit(result)
-		return result
-	else:
-		var result = _web_unsupported("request_stats")
-		current_stats_received.emit(result)
-		return result
-
-func set_stat_int(stat_name:String, val:int, store_now:bool) -> void:
-	if OS.get_name() == Constants.PLATFORM_WEB:
-		WavedashJS.setStat(stat_name, val)
-		if store_now:
-			WavedashJS.storeStats()
-
-func get_stat_int(stat_name: String) -> int:
-	if OS.get_name() == Constants.PLATFORM_WEB:
-		return WavedashJS.getStat(stat_name)
-	return -1
-
-func set_achievement(ach_name:String) -> void:
-	if OS.get_name() == Constants.PLATFORM_WEB:
-		WavedashJS.setAchievement(ach_name)
-		WavedashJS.storeStats()
-	
-func get_achievement(ach_name:String) -> bool:
-	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		return WavedashJS.getAchievement(ach_name)
-	return false
