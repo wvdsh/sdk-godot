@@ -14,6 +14,7 @@ var entered_tree: bool = false
 
 var cached_lobby_host_id : String = ""
 var cached_lobby_id : String = ""
+var _p2p_outgoing_buffer : JavaScriptObject
 
 # Handle events broadcasted from JS to Godot
 # JS -> GD
@@ -484,7 +485,9 @@ func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel:
 
 	# Option 4: Copy data byte by byte to a pre-allocated JS ArrayBuffer. Fastest option for small payloads.
 	var payload_size = payload.size()
-	var js_buffer = WavedashJS.getP2POutgoingMessageBuffer()
+	if not _p2p_outgoing_buffer:
+		_p2p_outgoing_buffer = WavedashJS.getP2POutgoingMessageBuffer()
+	var js_buffer = _p2p_outgoing_buffer
 	if payload_size > js_buffer.length:
 		push_warning("P2P message exceeds maximum payload length ", payload_size, " > ", js_buffer.length, " dropping message")
 		return false
