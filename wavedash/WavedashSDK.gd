@@ -441,21 +441,35 @@ func request_stats():
 		current_stats_received.emit(result)
 		return result
 
-func set_stat_int(stat_name:String, val:int, store_now:bool) -> void:
-	if OS.get_name() == Constants.PLATFORM_WEB:
-		WavedashJS.setStat(stat_name, val)
-		if store_now:
-			WavedashJS.storeStats()
+func set_stat_int(stat_name: String, val: int, store_now: bool = false) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.setStat(stat_name, val, store_now)
+	return false
+
+func set_stat_float(stat_name: String, val: float, store_now: bool = false) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.setStat(stat_name, val, store_now)
+	return false
+
+func store_stats() -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.storeStats()
+	return false
 
 func get_stat_int(stat_name: String) -> int:
-	if OS.get_name() == Constants.PLATFORM_WEB:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		return WavedashJS.getStat(stat_name)
-	return -1
+	return 0
 
-func set_achievement(ach_name:String) -> void:
-	if OS.get_name() == Constants.PLATFORM_WEB:
-		WavedashJS.setAchievement(ach_name)
-		WavedashJS.storeStats()
+func get_stat_float(stat_name: String) -> float:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.getStat(stat_name)
+	return 0.0
+
+func set_achievement(ach_name: String, store_now: bool = false) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.setAchievement(ach_name, store_now)
+	return false
 	
 func get_achievement(ach_name:String) -> bool:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
