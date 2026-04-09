@@ -11,6 +11,3 @@ func _exit_tree():
 
 func _get_plugin_name():
 	return "WavedashSDK"
-
-func _get_plugin_icon():
-	return EditorInterface.get_editor_theme().get_icon("Node", "EditorIcons")

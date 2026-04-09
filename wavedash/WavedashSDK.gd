@@ -16,6 +16,7 @@ var cached_lobby_host_id : String = ""
 var cached_lobby_id : String = ""
 var _p2p_outgoing_buffer : JavaScriptObject
 var _p2p_outgoing_buffer_size : int = 0
+var _has_js_buffer_transfer : bool = false
 
 # Handle events broadcasted from JS to Godot
 # JS -> GD
@@ -73,8 +74,8 @@ func _enter_tree():
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
 		WavedashJS.engineInstance["type"] = Constants.ENGINE_GODOT
 		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
-		# Expose Emscripten's FS so JS can use it for File IO
 		JavaScriptBridge.eval("window.WavedashJS.engineInstance.FS = FS;")
+		_has_js_buffer_transfer = JavaScriptBridge.has_method("js_buffer_to_packed_byte_array")
 
 func init(config: Dictionary):
 	assert(entered_tree, "WavedashSDK.init() called before WavedashSDK was added to the tree")
@@ -523,7 +524,13 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 		return []
 	
 	var messages: Array[Dictionary] = []
-	var raw_messages: PackedByteArray = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.drainP2PChannelToBuffer(channel))
+	var raw_messages: PackedByteArray
+	if _has_js_buffer_transfer:
+		raw_messages = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.drainP2PChannelToBuffer(channel))
+	else:
+		raw_messages = _js_buffer_to_packed_byte_array_b64("WavedashJS.drainP2PChannelToBuffer(%d)" % channel)
+		if raw_messages.is_empty():
+			return []
 	var read_offset = 0
 
 	while read_offset + 4 <= raw_messages.size():
@@ -542,6 +549,24 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 			continue
 	
 	return messages
+
+## Pre-4.4 fallback for JavaScriptBridge.js_buffer_to_packed_byte_array().
+## Takes a JS expression that evaluates to a Uint8Array, base64-encodes it on
+## the JS side, and decodes it back to a PackedByteArray in GDScript.
+func _js_buffer_to_packed_byte_array_b64(js_expr: String) -> PackedByteArray:
+	var b64 = JavaScriptBridge.eval(
+		"(function() {" +
+		"  var buf = %s;" % js_expr +
+		"  if (!buf || !buf.byteLength) return '';" +
+		"  var str = '';" +
+		"  for (var i = 0; i < buf.byteLength; i++)" +
+		"    str += String.fromCharCode(buf[i]);" +
+		"  return btoa(str);" +
+		"})()"
+	)
+	if b64 and b64 != "":
+		return Marshalls.base64_to_raw(b64)
+	return PackedByteArray()
 
 func _create_js_callback(req_id: int) -> JavaScriptObject:
 	var cb = JavaScriptBridge.create_callback(func(args):
