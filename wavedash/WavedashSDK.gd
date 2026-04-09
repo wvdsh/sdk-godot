@@ -348,14 +348,39 @@ func get_lobby_host_id(lobby_id: String) -> String:
 		return result if result else ""
 	return ""
 
-func get_lobby_data(lobby_id: String, key: String) -> String:
+func get_lobby_data_string(lobby_id: String, key: String) -> String:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		return WavedashJS.getLobbyData(lobby_id, key)
 	return ""
 
-func set_lobby_data(lobby_id: String, key: String, value: String) -> bool:
+func get_lobby_data_int(lobby_id: String, key: String) -> int:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.getLobbyData(lobby_id, key)
+	return 0
+
+func get_lobby_data_float(lobby_id: String, key: String) -> float:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.getLobbyData(lobby_id, key)
+	return 0.0
+
+func set_lobby_data_string(lobby_id: String, key: String, value: String) -> bool:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		return WavedashJS.setLobbyData(lobby_id, key, value)
+	return false
+
+func set_lobby_data_int(lobby_id: String, key: String, value: int) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.setLobbyData(lobby_id, key, value)
+	return false
+
+func set_lobby_data_float(lobby_id: String, key: String, value: float) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.setLobbyData(lobby_id, key, value)
+	return false
+
+func delete_lobby_data(lobby_id: String, key: String) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.deleteLobbyData(lobby_id, key)
 	return false
 
 func get_lobby_users(lobby_id: String) -> Array:
