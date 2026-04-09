@@ -84,6 +84,13 @@ func init(config: Dictionary):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.init(JSON.stringify(config))
 
+## Signal that the game is ready to receive events (LobbyJoined, LobbyMessage, etc).
+## Called automatically by init() unless deferEvents is set to true in the config.
+## If deferEvents is true, call this manually after your pre-game setup is complete.
+func ready_for_events() -> void:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		WavedashJS.readyForEvents()
+
 func toggle_overlay() -> void:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.toggleOverlay()
