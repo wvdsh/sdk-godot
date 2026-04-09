@@ -364,17 +364,20 @@ func get_lobby_host_id(lobby_id: String) -> String:
 
 func get_lobby_data_string(lobby_id: String, key: String) -> String:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		return WavedashJS.getLobbyData(lobby_id, key)
+		var result = WavedashJS.getLobbyData(lobby_id, key)
+		return result if result != null else ""
 	return ""
 
 func get_lobby_data_int(lobby_id: String, key: String) -> int:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		return WavedashJS.getLobbyData(lobby_id, key)
+		var result = WavedashJS.getLobbyData(lobby_id, key)
+		return int(result) if result != null else 0
 	return 0
 
 func get_lobby_data_float(lobby_id: String, key: String) -> float:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		return WavedashJS.getLobbyData(lobby_id, key)
+		var result = WavedashJS.getLobbyData(lobby_id, key)
+		return float(result) if result != null else 0.0
 	return 0.0
 
 func set_lobby_data_string(lobby_id: String, key: String, value: String) -> bool:
