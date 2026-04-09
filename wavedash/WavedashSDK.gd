@@ -8,12 +8,13 @@ const Constants = preload("WavedashConstants.gd")
 var WavedashJS : JavaScriptObject
 
 # Cache what we can so the next call doesn't have to wait for JS
-var user_id : String = ""
-var username : String = ""
-var entered_tree: bool = false
+var _cached_user : Dictionary = {}
+var _user_id : String = ""
+var _username : String = ""
+var _entered_tree: bool = false
 
-var cached_lobby_host_id : String = ""
-var cached_lobby_id : String = ""
+var _cached_lobby_host_id : String = ""
+var _cached_lobby_id : String = ""
 var _p2p_outgoing_buffer : JavaScriptObject
 var _p2p_outgoing_buffer_size : int = 0
 var _has_js_buffer_transfer : bool = false
@@ -65,7 +66,7 @@ func _web_unsupported(method_name: String) -> Dictionary:
 
 func _enter_tree():
 	print("WavedashSDK._enter_tree() called, platform: ", OS.get_name())
-	entered_tree = true
+	_entered_tree = true
 	if OS.get_name() == Constants.PLATFORM_WEB:
 		WavedashJS = JavaScriptBridge.get_interface("WavedashJS")
 		if not WavedashJS:
@@ -79,7 +80,7 @@ func _enter_tree():
 		_has_js_buffer_transfer = JavaScriptBridge.has_method("js_buffer_to_packed_byte_array")
 
 func init(config: Dictionary):
-	assert(entered_tree, "WavedashSDK.init() called before WavedashSDK was added to the tree")
+	assert(_entered_tree, "WavedashSDK.init() called before WavedashSDK was added to the tree")
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.init(JSON.stringify(config))
 
@@ -88,32 +89,29 @@ func ready_for_events() -> void:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.readyForEvents()
 
-func show_overlay() -> void:
+func toggle_overlay() -> void:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.toggleOverlay()
 
+func _fetch_user() -> Dictionary:
+	if _cached_user.is_empty() and OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		_cached_user = JSON.parse_string(WavedashJS.getUser())
+		_user_id = _cached_user.get("id", "")
+		_username = _cached_user.get("username", "")
+	return _cached_user
+
+func get_user() -> Dictionary:
+	return _fetch_user()
+
 func get_user_id() -> String:
-	if user_id:
-		return user_id
-		
-	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		var user_data = JSON.parse_string(WavedashJS.getUser())
-		user_id = user_data["id"]
-		username = user_data["username"]
-		return user_id
-	
-	return ""
-	
+	if _user_id == "":
+		_fetch_user()
+	return _user_id
+
 func get_username() -> String:
-	if username != "":
-		return username
-
-	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		var user_data = JSON.parse_string(WavedashJS.getUser())
-		username = user_data["username"]
-		return username
-
-	return ""
+	if _username == "":
+		_fetch_user()
+	return _username
 
 ## Returns the CDN URL for a cached user's avatar with size transformation.
 ## Users are cached when seen via friends list or lobby membership.
@@ -127,27 +125,31 @@ func get_user_avatar_url(user_id_to_fetch: String, size: int = Constants.AVATAR_
 ## Fetches avatar for a user and emits user_avatar_loaded signal when complete.
 ## Users must be cached (seen via friends list or lobby membership) for this to work.
 ## Emits user_avatar_loaded(texture, user_id) - texture is null on failure.
-func get_user_avatar(user_id_to_fetch: String, size: int = Constants.AVATAR_SIZE_MEDIUM) -> void:
+func get_user_avatar(user_id_to_fetch: String, size: int = Constants.AVATAR_SIZE_MEDIUM) -> Texture2D:
 	var url = get_user_avatar_url(user_id_to_fetch, size)
 	if url.is_empty():
 		user_avatar_loaded.emit(null, user_id_to_fetch)
-		return
+		return null
 
 	var http = HTTPRequest.new()
 	add_child(http)
-	http.request_completed.connect(_on_avatar_request_completed.bind(user_id_to_fetch, http))
 	var error = http.request(url)
 	if error != OK:
 		push_warning("Failed to start avatar request for user: " + user_id_to_fetch)
 		http.queue_free()
 		user_avatar_loaded.emit(null, user_id_to_fetch)
+		return null
 
-func _on_avatar_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, avatar_user_id: String, http: HTTPRequest) -> void:
+	var response = await http.request_completed
 	http.queue_free()
+	var result: int = response[0]
+	var response_code: int = response[1]
+	var body: PackedByteArray = response[3]
+
 	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
-		push_warning("Failed to load avatar for user: " + avatar_user_id)
-		user_avatar_loaded.emit(null, avatar_user_id)
-		return
+		push_warning("Failed to load avatar for user: " + user_id_to_fetch)
+		user_avatar_loaded.emit(null, user_id_to_fetch)
+		return null
 
 	var image = Image.new()
 	var err = image.load_png_from_buffer(body)
@@ -156,12 +158,14 @@ func _on_avatar_request_completed(result: int, response_code: int, _headers: Pac
 	if err != OK:
 		err = image.load_webp_from_buffer(body)
 
-	if err == OK:
-		var texture = ImageTexture.create_from_image(image)
-		user_avatar_loaded.emit(texture, avatar_user_id)
-	else:
-		push_warning("Failed to decode avatar for user: " + avatar_user_id)
-		user_avatar_loaded.emit(null, avatar_user_id)
+	if err != OK:
+		push_warning("Failed to decode avatar for user: " + user_id_to_fetch)
+		user_avatar_loaded.emit(null, user_id_to_fetch)
+		return null
+
+	var texture = ImageTexture.create_from_image(image)
+	user_avatar_loaded.emit(texture, user_id_to_fetch)
+	return texture
 
 ## Lists the current user's friends.
 ## Emits got_friends signal with response containing: userId, username, avatarUrl (optional), isOnline.
@@ -247,8 +251,8 @@ func create_lobby(lobby_type: int, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		var result = await _invoke_js(WavedashJS.createLobby(lobby_type, max_players))
 		if result.get("success", false):
-			cached_lobby_id = result.get("data", "")
-			cached_lobby_host_id = user_id
+			_cached_lobby_id = result.get("data", "")
+			_cached_lobby_host_id = _user_id
 		lobby_created.emit(result)
 		return result
 	else:
@@ -305,10 +309,9 @@ func upload_remote_file(file_path: String):
 		remote_file_uploaded.emit(result)
 		return result
 
-# Simply returns a boolean indicating success or failure
-# For the full lobby join payload, connect to the lobby_joined signal
-# lobby_joined signal triggers even when lobby is joined externally via Wavedash UI
-func join_lobby(lobby_id: String):
+## Requests to join a lobby. Returns true if the request was accepted.
+## Connect to lobby_joined for the full payload once the server confirms the join.
+func join_lobby(lobby_id: String) -> bool:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		var result = await _invoke_js(WavedashJS.joinLobby(lobby_id))
 		return result.get("success", false)
@@ -317,9 +320,9 @@ func join_lobby(lobby_id: String):
 func leave_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		var result = await _invoke_js(WavedashJS.leaveLobby(lobby_id))
-		if result.get("success", false) and result.get("data", "") == cached_lobby_id:
-			cached_lobby_id = ""
-			cached_lobby_host_id = ""
+		if result.get("success", false) and result.get("data", "") == _cached_lobby_id:
+			_cached_lobby_id = ""
+			_cached_lobby_host_id = ""
 		lobby_left.emit(result)
 		return result
 	else:
@@ -340,12 +343,12 @@ func list_available_lobbies():
 func get_lobby_host_id(lobby_id: String) -> String:
 	if lobby_id == "":
 		return ""
-	if cached_lobby_id == lobby_id and cached_lobby_host_id != "":
-		return cached_lobby_host_id
+	if _cached_lobby_id == lobby_id and _cached_lobby_host_id != "":
+		return _cached_lobby_host_id
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		var result = WavedashJS.getLobbyHostId(lobby_id)
-		if lobby_id == cached_lobby_id:
-			cached_lobby_host_id = result if result else ""
+		if lobby_id == _cached_lobby_id:
+			_cached_lobby_host_id = result if result else ""
 		return result if result else ""
 	return ""
 
@@ -637,7 +640,7 @@ func _dispatch_js_event(args):
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] Lobby users updated: ", payload)
 			# Reset lobby host, might have changed when users shuffled
-			cached_lobby_host_id = ""
+			_cached_lobby_host_id = ""
 			lobby_users_updated.emit(data)
 		# All lobby join flows land here
 		# 1. create_lobby success -> LOBBY_JOINED
@@ -647,16 +650,16 @@ func _dispatch_js_event(args):
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] Lobby joined: ", payload)
 			# Payload: { lobbyId, hostId, users, metadata }
-			cached_lobby_id = data.get("lobbyId", "")
-			cached_lobby_host_id = data.get("hostId", "")
+			_cached_lobby_id = data.get("lobbyId", "")
+			_cached_lobby_host_id = data.get("hostId", "")
 			lobby_joined.emit(data)
 		Constants.JS_EVENT_LOBBY_KICKED:
 			var data = JSON.parse_string(payload)
 			# payload: { lobbyId, reason }
 			var reason = data.get("reason", Constants.LOBBY_KICKED_REASON_KICKED)
 			print("[WavedashSDK] Lobby kicked (reason: %s): %s" % [reason, payload])
-			cached_lobby_id = ""
-			cached_lobby_host_id = ""
+			_cached_lobby_id = ""
+			_cached_lobby_host_id = ""
 			lobby_kicked.emit(data)
 		Constants.JS_EVENT_LOBBY_INVITE:
 			var data = JSON.parse_string(payload)
