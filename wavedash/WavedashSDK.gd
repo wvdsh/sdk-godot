@@ -115,6 +115,14 @@ func get_username() -> String:
 		_fetch_user()
 	return _username
 
+## Returns the launch params that were passed via URL when the game was launched.
+## {"lobby": "lobbyId123"}
+func get_launch_params() -> Dictionary:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		var result: String = WavedashJS.getLaunchParams()
+		return JSON.parse_string(result) if result else {}
+	return {}
+
 ## Returns the CDN URL for a cached user's avatar with size transformation.
 ## Users are cached when seen via friends list or lobby membership.
 ## Returns empty string if user not cached or has no avatar.
@@ -272,9 +280,9 @@ func _validate_user_data_path(path: String, func_name: String) -> bool:
 func download_remote_directory(path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if not _validate_user_data_path(path, "download_remote_directory"):
-			var result = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
-			remote_directory_downloaded.emit(result)
-			return result
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			remote_directory_downloaded.emit(err)
+			return err
 		var result = await _invoke_js(WavedashJS.downloadRemoteDirectory(path))
 		remote_directory_downloaded.emit(result)
 		return result
@@ -286,9 +294,9 @@ func download_remote_directory(path: String):
 func download_remote_file(file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if not _validate_user_data_path(file_path, "download_remote_file"):
-			var result = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
-			remote_file_downloaded.emit(result)
-			return result
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			remote_file_downloaded.emit(err)
+			return err
 		var result = await _invoke_js(WavedashJS.downloadRemoteFile(file_path))
 		remote_file_downloaded.emit(result)
 		return result
@@ -300,9 +308,9 @@ func download_remote_file(file_path: String):
 func upload_remote_file(file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if not _validate_user_data_path(file_path, "upload_remote_file"):
-			var result = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
-			remote_file_uploaded.emit(result)
-			return result
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			remote_file_uploaded.emit(err)
+			return err
 		var result = await _invoke_js(WavedashJS.uploadRemoteFile(file_path))
 		remote_file_uploaded.emit(result)
 		return result
@@ -424,9 +432,9 @@ func invite_user_to_lobby(lobby_id: String, user_id_to_invite: String):
 func create_ugc_item(ugcType: int, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if local_file_path != null and not _validate_user_data_path(local_file_path, "create_ugc_item"):
-			var result = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
-			ugc_item_created.emit(result)
-			return result
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			ugc_item_created.emit(err)
+			return err
 		var result = await _invoke_js(WavedashJS.createUGCItem(ugcType, title, description, visibility, local_file_path))
 		ugc_item_created.emit(result)
 		return result
@@ -438,9 +446,9 @@ func create_ugc_item(ugcType: int, title: String = "", description: String = "",
 func update_ugc_item(ugc_id: String, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if local_file_path != null and not _validate_user_data_path(local_file_path, "update_ugc_item"):
-			var result = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
-			ugc_item_updated.emit(result)
-			return result
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			ugc_item_updated.emit(err)
+			return err
 		var result = await _invoke_js(WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path))
 		ugc_item_updated.emit(result)
 		return result
@@ -452,9 +460,9 @@ func update_ugc_item(ugc_id: String, title: String = "", description: String = "
 func download_ugc_item(ugc_id: String, local_file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if not _validate_user_data_path(local_file_path, "download_ugc_item"):
-			var result = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
-			ugc_item_downloaded.emit(result)
-			return result
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			ugc_item_downloaded.emit(err)
+			return err
 		var result = await _invoke_js(WavedashJS.downloadUGCItem(ugc_id, local_file_path))
 		ugc_item_downloaded.emit(result)
 		return result
