@@ -8,35 +8,27 @@ const Constants = preload("WavedashConstants.gd")
 var WavedashJS : JavaScriptObject
 
 # Cache what we can so the next call doesn't have to wait for JS
-var user_id : String = ""
-var username : String = ""
-var entered_tree: bool = false
+var _cached_user : Dictionary = {}
+var _user_id : String = ""
+var _username : String = ""
+var _entered_tree: bool = false
 
-var cached_lobby_host_id : String = ""
-var cached_lobby_id : String = ""
+var _cached_lobby_host_id : String = ""
+var _cached_lobby_id : String = ""
+var _p2p_outgoing_buffer : JavaScriptObject
+var _p2p_outgoing_buffer_size : int = 0
+var _has_js_buffer_transfer : bool = false
 
 # Handle events broadcasted from JS to Godot
 # JS -> GD
 var _js_callback_receiver : JavaScriptObject
 
-# Handle results when Godot calls async JS functions
-# GD -> JS (async) -> GD
-
-var _on_lobby_created_js : JavaScriptObject
-var _on_lobby_left_js : JavaScriptObject
-var _on_get_leaderboard_result_js : JavaScriptObject
-var _on_post_leaderboard_score_result_js : JavaScriptObject
-var _on_get_leaderboard_entries_result_js : JavaScriptObject
-var _on_create_ugc_item_result_js : JavaScriptObject
-var _on_update_ugc_item_result_js : JavaScriptObject
-var _on_download_ugc_item_result_js : JavaScriptObject
-var _on_download_remote_file_result_js : JavaScriptObject
-var _on_upload_remote_file_result_js : JavaScriptObject
-var _on_download_remote_directory_result_js : JavaScriptObject
-var _on_get_lobbies_result_js : JavaScriptObject
-var _on_request_stats_result_js : JavaScriptObject
-var _on_sent_lobby_invite_js : JavaScriptObject
-var _on_list_friends_result_js : JavaScriptObject
+# Per-request tracking for async JS calls (GD -> JS -> GD)
+# Each call gets a unique ID so concurrent awaits don't cross-wire responses
+var _next_request_id: int = 0
+var _pending_results: Dictionary = {}
+var _active_callbacks: Dictionary = {}
+signal _request_resolved(request_id: int)
 
 # Signals that Godot developers can connect to
 signal lobby_joined(payload)
@@ -62,78 +54,74 @@ signal p2p_connection_established(payload)
 signal p2p_connection_failed(payload)
 signal p2p_peer_disconnected(payload)
 signal current_stats_received(payload)
+signal stats_stored(payload)
 signal backend_connected(payload)
 signal backend_reconnecting(payload)
 signal backend_disconnected(payload)
 signal user_avatar_loaded(texture: Texture2D, user_id: String)
 signal got_friends(payload)
 
+func _web_unsupported(method_name: String) -> Dictionary:
+	return {"success": false, "data": null, "message": "%s is only supported in Web builds" % method_name}
+
 func _enter_tree():
 	print("WavedashSDK._enter_tree() called, platform: ", OS.get_name())
-	entered_tree = true
+	_entered_tree = true
 	if OS.get_name() == Constants.PLATFORM_WEB:
 		WavedashJS = JavaScriptBridge.get_interface("WavedashJS")
 		if not WavedashJS:
 			push_error("WavedashSDK: WavedashJS not found on window")
 			return
 		assert(WavedashJS.engineInstance != null, "WavedashSDK: WavedashJS.engineInstance not found on window. Call WavedashJS.setEngineInstance(engine) before calling engine.startGame()")
-		_on_lobby_created_js = JavaScriptBridge.create_callback(_on_lobby_created_gd)
-		_on_get_leaderboard_result_js = JavaScriptBridge.create_callback(_on_get_leaderboard_result_gd)
-		_on_lobby_left_js = JavaScriptBridge.create_callback(_on_lobby_left_gd)
-		_on_get_leaderboard_entries_result_js = JavaScriptBridge.create_callback(_on_get_leaderboard_entries_result_gd)
-		_on_post_leaderboard_score_result_js = JavaScriptBridge.create_callback(_on_post_leaderboard_score_result_gd)
-		_on_create_ugc_item_result_js = JavaScriptBridge.create_callback(_on_create_ugc_item_result_gd)
-		_on_update_ugc_item_result_js = JavaScriptBridge.create_callback(_on_update_ugc_item_result_gd)
-		_on_download_ugc_item_result_js = JavaScriptBridge.create_callback(_on_download_ugc_item_result_gd)
-		_on_download_remote_directory_result_js = JavaScriptBridge.create_callback(_on_download_remote_directory_result_gd)
-		_on_download_remote_file_result_js = JavaScriptBridge.create_callback(_on_download_remote_file_result_gd)
-		_on_upload_remote_file_result_js = JavaScriptBridge.create_callback(_on_upload_remote_file_result_gd)
-		_on_get_lobbies_result_js = JavaScriptBridge.create_callback(_on_get_lobbies_result_gd)
-		_on_request_stats_result_js = JavaScriptBridge.create_callback(_on_request_stats_result_gd)
-		_on_sent_lobby_invite_js = JavaScriptBridge.create_callback(_on_sent_lobby_invite_gd)
-		_on_list_friends_result_js = JavaScriptBridge.create_callback(_on_list_friends_result_gd)
 		_js_callback_receiver = JavaScriptBridge.create_callback(_dispatch_js_event)
 		WavedashJS.engineInstance["type"] = Constants.ENGINE_GODOT
 		WavedashJS.engineInstance["SendMessage"] = _js_callback_receiver
-		# Expose Emscripten's FS so JS can use it for File IO
 		JavaScriptBridge.eval("window.WavedashJS.engineInstance.FS = FS;")
+		_has_js_buffer_transfer = JavaScriptBridge.has_method("js_buffer_to_packed_byte_array")
 
 func init(config: Dictionary):
-	assert(entered_tree, "WavedashSDK.init() called before WavedashSDK was added to the tree")
+	assert(_entered_tree, "WavedashSDK.init() called before WavedashSDK was added to the tree")
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.init(JSON.stringify(config))
 
-# Signal to JS SDK that game is ready to receive events like LOBBY_JOINED, LOBBY_LEFT, etc.
+## Signal that the game is ready to receive events (LobbyJoined, LobbyMessage, etc).
+## Called automatically by init() unless deferEvents is set to true in the config.
+## If deferEvents is true, call this manually after your pre-game setup is complete.
 func ready_for_events() -> void:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.readyForEvents()
 
-func show_overlay() -> void:
+func toggle_overlay() -> void:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		WavedashJS.toggleOverlay()
 
+func _fetch_user() -> Dictionary:
+	if _cached_user.is_empty() and OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		_cached_user = JSON.parse_string(WavedashJS.getUser())
+		_user_id = _cached_user.get("id", "")
+		_username = _cached_user.get("username", "")
+	return _cached_user
+
+func get_user() -> Dictionary:
+	return _fetch_user()
+
 func get_user_id() -> String:
-	if user_id:
-		return user_id
-		
-	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		var user_data = JSON.parse_string(WavedashJS.getUser())
-		user_id = user_data["id"]
-		username = user_data["username"]
-		return user_id
-	
-	return ""
-	
+	if _user_id == "":
+		_fetch_user()
+	return _user_id
+
 func get_username() -> String:
-	if username != "":
-		return username
+	if _username == "":
+		_fetch_user()
+	return _username
 
+## Returns the launch params that were passed via URL when the game was launched.
+## {"lobby": "lobbyId123"}
+func get_launch_params() -> Dictionary:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		var user_data = JSON.parse_string(WavedashJS.getUser())
-		username = user_data["username"]
-		return username
-
-	return ""
+		var result: String = WavedashJS.getLaunchParams()
+		return JSON.parse_string(result) if result else {}
+	return {}
 
 ## Returns the CDN URL for a cached user's avatar with size transformation.
 ## Users are cached when seen via friends list or lobby membership.
@@ -147,27 +135,31 @@ func get_user_avatar_url(user_id_to_fetch: String, size: int = Constants.AVATAR_
 ## Fetches avatar for a user and emits user_avatar_loaded signal when complete.
 ## Users must be cached (seen via friends list or lobby membership) for this to work.
 ## Emits user_avatar_loaded(texture, user_id) - texture is null on failure.
-func get_user_avatar(user_id_to_fetch: String, size: int = Constants.AVATAR_SIZE_MEDIUM) -> void:
+func get_user_avatar(user_id_to_fetch: String, size: int = Constants.AVATAR_SIZE_MEDIUM) -> Texture2D:
 	var url = get_user_avatar_url(user_id_to_fetch, size)
 	if url.is_empty():
 		user_avatar_loaded.emit(null, user_id_to_fetch)
-		return
+		return null
 
 	var http = HTTPRequest.new()
 	add_child(http)
-	http.request_completed.connect(_on_avatar_request_completed.bind(user_id_to_fetch, http))
 	var error = http.request(url)
 	if error != OK:
 		push_warning("Failed to start avatar request for user: " + user_id_to_fetch)
 		http.queue_free()
 		user_avatar_loaded.emit(null, user_id_to_fetch)
+		return null
 
-func _on_avatar_request_completed(result: int, response_code: int, _headers: PackedStringArray, body: PackedByteArray, avatar_user_id: String, http: HTTPRequest) -> void:
+	var response = await http.request_completed
 	http.queue_free()
+	var result: int = response[0]
+	var response_code: int = response[1]
+	var body: PackedByteArray = response[3]
+
 	if result != HTTPRequest.RESULT_SUCCESS or response_code != 200:
-		push_warning("Failed to load avatar for user: " + avatar_user_id)
-		user_avatar_loaded.emit(null, avatar_user_id)
-		return
+		push_warning("Failed to load avatar for user: " + user_id_to_fetch)
+		user_avatar_loaded.emit(null, user_id_to_fetch)
+		return null
 
 	var image = Image.new()
 	var err = image.load_png_from_buffer(body)
@@ -176,31 +168,57 @@ func _on_avatar_request_completed(result: int, response_code: int, _headers: Pac
 	if err != OK:
 		err = image.load_webp_from_buffer(body)
 
-	if err == OK:
-		var texture = ImageTexture.create_from_image(image)
-		user_avatar_loaded.emit(texture, avatar_user_id)
-	else:
-		push_warning("Failed to decode avatar for user: " + avatar_user_id)
-		user_avatar_loaded.emit(null, avatar_user_id)
+	if err != OK:
+		push_warning("Failed to decode avatar for user: " + user_id_to_fetch)
+		user_avatar_loaded.emit(null, user_id_to_fetch)
+		return null
+
+	var texture = ImageTexture.create_from_image(image)
+	user_avatar_loaded.emit(texture, user_id_to_fetch)
+	return texture
 
 ## Lists the current user's friends.
 ## Emits got_friends signal with response containing: userId, username, avatarUrl (optional), isOnline.
 ## Friends are automatically cached for avatar lookups via get_user_avatar_url/get_user_avatar.
-func list_friends() -> void:
+func list_friends():
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.listFriends().then(_on_list_friends_result_js)
+		var result = await _invoke_js(WavedashJS.listFriends())
+		got_friends.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("list_friends")
+		got_friends.emit(result)
+		return result
 
 func get_leaderboard(leaderboard_name: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.getLeaderboard(leaderboard_name).then(_on_get_leaderboard_result_js)
+		var result = await _invoke_js(WavedashJS.getLeaderboard(leaderboard_name))
+		got_leaderboard.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("get_leaderboard")
+		got_leaderboard.emit(result)
+		return result
 
 func get_or_create_leaderboard(leaderboard_name: String, sort_method: int, display_type: int):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.getOrCreateLeaderboard(leaderboard_name, sort_method, display_type).then(_on_get_leaderboard_result_js)
+		var result = await _invoke_js(WavedashJS.getOrCreateLeaderboard(leaderboard_name, sort_method, display_type))
+		got_leaderboard.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("get_or_create_leaderboard")
+		got_leaderboard.emit(result)
+		return result
 
 func get_my_leaderboard_entries(leaderboard_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.getMyLeaderboardEntries(leaderboard_id).then(_on_get_leaderboard_entries_result_js)
+		var result = await _invoke_js(WavedashJS.getMyLeaderboardEntries(leaderboard_id))
+		got_leaderboard_entries.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("get_my_leaderboard_entries")
+		got_leaderboard_entries.emit(result)
+		return result
 
 func get_leaderboard_entry_count(leaderboard_id: String) -> int:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
@@ -211,19 +229,46 @@ func get_leaderboard_entry_count(leaderboard_id: String) -> int:
 
 func get_leaderboard_entries_around_player(leaderboard_id: String, count_ahead: int, count_behind: int, friends_only: bool):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.listLeaderboardEntriesAroundUser(leaderboard_id, count_ahead, count_behind, friends_only).then(_on_get_leaderboard_entries_result_js)
+		var result = await _invoke_js(WavedashJS.listLeaderboardEntriesAroundUser(leaderboard_id, count_ahead, count_behind, friends_only))
+		got_leaderboard_entries.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("get_leaderboard_entries_around_player")
+		got_leaderboard_entries.emit(result)
+		return result
 
 func get_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, friends_only: bool):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.listLeaderboardEntries(leaderboard_id, offset, limit, friends_only).then(_on_get_leaderboard_entries_result_js)
+		var result = await _invoke_js(WavedashJS.listLeaderboardEntries(leaderboard_id, offset, limit, friends_only))
+		got_leaderboard_entries.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("get_leaderboard_entries")
+		got_leaderboard_entries.emit(result)
+		return result
 
 func post_leaderboard_score(leaderboard_id: String, score: int, keep_best: bool, ugc_id: String = ""):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.uploadLeaderboardScore(leaderboard_id, score, keep_best, ugc_id).then(_on_post_leaderboard_score_result_js)
+		var result = await _invoke_js(WavedashJS.uploadLeaderboardScore(leaderboard_id, score, keep_best, ugc_id))
+		posted_leaderboard_score.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("post_leaderboard_score")
+		posted_leaderboard_score.emit(result)
+		return result
 
 func create_lobby(lobby_type: int, max_players = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.createLobby(lobby_type, max_players).then(_on_lobby_created_js)
+		var result = await _invoke_js(WavedashJS.createLobby(lobby_type, max_players))
+		if result.get("success", false):
+			_cached_lobby_id = result.get("data", "")
+			_cached_lobby_host_id = _user_id
+		lobby_created.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("create_lobby")
+		lobby_created.emit(result)
+		return result
 
 func _validate_user_data_path(path: String, func_name: String) -> bool:
 	var user_data_dir = OS.get_user_data_dir()
@@ -235,53 +280,124 @@ func _validate_user_data_path(path: String, func_name: String) -> bool:
 func download_remote_directory(path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if not _validate_user_data_path(path, "download_remote_directory"):
-			return
-		WavedashJS.downloadRemoteDirectory(path).then(_on_download_remote_directory_result_js)
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			remote_directory_downloaded.emit(err)
+			return err
+		var result = await _invoke_js(WavedashJS.downloadRemoteDirectory(path))
+		remote_directory_downloaded.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("download_remote_directory")
+		remote_directory_downloaded.emit(result)
+		return result
 
 func download_remote_file(file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if not _validate_user_data_path(file_path, "download_remote_file"):
-			return
-		WavedashJS.downloadRemoteFile(file_path).then(_on_download_remote_file_result_js)
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			remote_file_downloaded.emit(err)
+			return err
+		var result = await _invoke_js(WavedashJS.downloadRemoteFile(file_path))
+		remote_file_downloaded.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("download_remote_file")
+		remote_file_downloaded.emit(result)
+		return result
 
 func upload_remote_file(file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if not _validate_user_data_path(file_path, "upload_remote_file"):
-			return
-		WavedashJS.uploadRemoteFile(file_path).then(_on_upload_remote_file_result_js)
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			remote_file_uploaded.emit(err)
+			return err
+		var result = await _invoke_js(WavedashJS.uploadRemoteFile(file_path))
+		remote_file_uploaded.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("upload_remote_file")
+		remote_file_uploaded.emit(result)
+		return result
 
-func join_lobby(lobby_id: String):
+## Requests to join a lobby. Returns true if the request was accepted.
+## Connect to lobby_joined for the full payload once the server confirms the join.
+func join_lobby(lobby_id: String) -> bool:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.joinLobby(lobby_id)
+		var result = await _invoke_js(WavedashJS.joinLobby(lobby_id))
+		return result.get("success", false)
+	return false
 
 func leave_lobby(lobby_id: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.leaveLobby(lobby_id).then(_on_lobby_left_js)
+		var result = await _invoke_js(WavedashJS.leaveLobby(lobby_id))
+		if result.get("success", false) and result.get("data", "") == _cached_lobby_id:
+			_cached_lobby_id = ""
+			_cached_lobby_host_id = ""
+		lobby_left.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("leave_lobby")
+		lobby_left.emit(result)
+		return result
 
 func list_available_lobbies():
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.listAvailableLobbies().then(_on_get_lobbies_result_js)
+		var result = await _invoke_js(WavedashJS.listAvailableLobbies())
+		got_lobbies.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("list_available_lobbies")
+		got_lobbies.emit(result)
+		return result
 
 func get_lobby_host_id(lobby_id: String) -> String:
 	if lobby_id == "":
 		return ""
-	if cached_lobby_id == lobby_id and cached_lobby_host_id != "":
-		return cached_lobby_host_id
+	if _cached_lobby_id == lobby_id and _cached_lobby_host_id != "":
+		return _cached_lobby_host_id
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		var result = WavedashJS.getLobbyHostId(lobby_id)
-		if lobby_id == cached_lobby_id:
-			cached_lobby_host_id = result if result else ""
+		if lobby_id == _cached_lobby_id:
+			_cached_lobby_host_id = result if result else ""
 		return result if result else ""
 	return ""
 
-func get_lobby_data(lobby_id: String, key: String) -> String:
+func get_lobby_data_string(lobby_id: String, key: String) -> String:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		return WavedashJS.getLobbyData(lobby_id, key)
+		var result = WavedashJS.getLobbyData(lobby_id, key)
+		return result if result != null else ""
 	return ""
 
-func set_lobby_data(lobby_id: String, key: String, value: String) -> bool:
+func get_lobby_data_int(lobby_id: String, key: String) -> int:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		var result = WavedashJS.getLobbyData(lobby_id, key)
+		return int(result) if result != null else 0
+	return 0
+
+func get_lobby_data_float(lobby_id: String, key: String) -> float:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		var result = WavedashJS.getLobbyData(lobby_id, key)
+		return float(result) if result != null else 0.0
+	return 0.0
+
+func set_lobby_data_string(lobby_id: String, key: String, value: String) -> bool:
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		return WavedashJS.setLobbyData(lobby_id, key, value)
+	return false
+
+func set_lobby_data_int(lobby_id: String, key: String, value: int) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.setLobbyData(lobby_id, key, value)
+	return false
+
+func set_lobby_data_float(lobby_id: String, key: String, value: float) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.setLobbyData(lobby_id, key, value)
+	return false
+
+func delete_lobby_data(lobby_id: String, key: String) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.deleteLobbyData(lobby_id, key)
 	return false
 
 func get_lobby_users(lobby_id: String) -> Array:
@@ -305,31 +421,103 @@ func send_lobby_chat_message(lobby_id: String, message: String):
 
 func invite_user_to_lobby(lobby_id: String, user_id_to_invite: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		WavedashJS.inviteUserToLobby(lobby_id, user_id_to_invite).then(_on_sent_lobby_invite_js)
+		var result = await _invoke_js(WavedashJS.inviteUserToLobby(lobby_id, user_id_to_invite))
+		sent_lobby_invite.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("invite_user_to_lobby")
+		sent_lobby_invite.emit(result)
+		return result
 
 # User Generated Content (UGC) functions
+# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
+# Faster, no I/O, saves the file system sync overhead
 func create_ugc_item(ugcType: int, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if local_file_path != null and not _validate_user_data_path(local_file_path, "create_ugc_item"):
-			return
-		# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
-		# Faster, no I/O, saves the file system sync overhead
-		WavedashJS.createUGCItem(ugcType, title, description, visibility, local_file_path).then(_on_create_ugc_item_result_js)
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			ugc_item_created.emit(err)
+			return err
+		var result = await _invoke_js(WavedashJS.createUGCItem(ugcType, title, description, visibility, local_file_path))
+		ugc_item_created.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("create_ugc_item")
+		ugc_item_created.emit(result)
+		return result
 
 func update_ugc_item(ugc_id: String, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if local_file_path != null and not _validate_user_data_path(local_file_path, "update_ugc_item"):
-			return
-		# TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
-		# Faster, no I/O, saves the file system sync overhead
-		WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path).then(_on_update_ugc_item_result_js)
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			ugc_item_updated.emit(err)
+			return err
+		var result = await _invoke_js(WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path))
+		ugc_item_updated.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("update_ugc_item")
+		ugc_item_updated.emit(result)
+		return result
 
-# Download the given UGC item to the given local file path
 func download_ugc_item(ugc_id: String, local_file_path: String):
 	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
 		if not _validate_user_data_path(local_file_path, "download_ugc_item"):
-			return
-		WavedashJS.downloadUGCItem(ugc_id, local_file_path).then(_on_download_ugc_item_result_js)
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with OS.get_user_data_dir()"}
+			ugc_item_downloaded.emit(err)
+			return err
+		var result = await _invoke_js(WavedashJS.downloadUGCItem(ugc_id, local_file_path))
+		ugc_item_downloaded.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("download_ugc_item")
+		ugc_item_downloaded.emit(result)
+		return result
+
+func request_stats():
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		var result = await _invoke_js(WavedashJS.requestStats())
+		current_stats_received.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("request_stats")
+		current_stats_received.emit(result)
+		return result
+
+func set_stat_int(stat_name: String, val: int, store_now: bool = false) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.setStat(stat_name, val, store_now)
+	return false
+
+func set_stat_float(stat_name: String, val: float, store_now: bool = false) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.setStat(stat_name, val, store_now)
+	return false
+
+func store_stats() -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.storeStats()
+	return false
+
+func get_stat_int(stat_name: String) -> int:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.getStat(stat_name)
+	return 0
+
+func get_stat_float(stat_name: String) -> float:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.getStat(stat_name)
+	return 0.0
+
+func set_achievement(ach_name: String, store_now: bool = false) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.setAchievement(ach_name, store_now)
+	return false
+	
+func get_achievement(ach_name:String) -> bool:
+	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
+		return WavedashJS.getAchievement(ach_name)
+	return false
 
 # P2P messaging
 # Send a P2P message from Godot. JS will only send the message if the peer is ready to receive
@@ -355,13 +543,17 @@ func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel:
 
 	# Option 4: Copy data byte by byte to a pre-allocated JS ArrayBuffer. Fastest option for small payloads.
 	var payload_size = payload.size()
-	var js_buffer = WavedashJS.getP2POutgoingMessageBuffer()
-	if payload_size > js_buffer.length:
-		push_warning("P2P message exceeds maximum payload length ", payload_size, " > ", js_buffer.length, " dropping message")
+	if not _p2p_outgoing_buffer:
+		_p2p_outgoing_buffer = WavedashJS.getP2POutgoingMessageBuffer()
+		_p2p_outgoing_buffer_size = _p2p_outgoing_buffer.length
+	var js_buffer = _p2p_outgoing_buffer
+	if payload_size > _p2p_outgoing_buffer_size:
+		push_warning("P2P message exceeds maximum payload length ", payload_size, " > ", _p2p_outgoing_buffer_size, " dropping message")
 		return false
 	# Copy bytes (1 bridge call per byte unfortunately, still faster than base64 encoding as long as payload is < 16KB)
 	for i in range(payload_size):
-		js_buffer[i] = payload[i]
+		# gdlint: ignore=unsafe_property_access
+		(js_buffer as Variant)[i] = payload[i]
 	if target_user_id == "":
 		# Broadcast to all peers
 		return WavedashJS.broadcastP2PMessage(channel, reliable, js_buffer, payload_size)
@@ -375,7 +567,13 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 		return []
 	
 	var messages: Array[Dictionary] = []
-	var raw_messages: PackedByteArray = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.drainP2PChannelToBuffer(channel))
+	var raw_messages: PackedByteArray
+	if _has_js_buffer_transfer:
+		raw_messages = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.drainP2PChannelToBuffer(channel))
+	else:
+		raw_messages = _js_buffer_to_packed_byte_array_b64("WavedashJS.drainP2PChannelToBuffer(%d)" % channel)
+		if raw_messages.is_empty():
+			return []
 	var read_offset = 0
 
 	while read_offset + 4 <= raw_messages.size():
@@ -395,100 +593,48 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 	
 	return messages
 
-# Handle callbacks triggered by Promises resolving
-func _on_lobby_created_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	print("[WavedashSDK] Lobby created: ", response)
-	var success: bool = response.get("success", false)
-	# Cache the lobbyId from the response (creating means we're the host)
-	if success:
-		cached_lobby_id = response.get("data", "")
-		cached_lobby_host_id = user_id
-	lobby_created.emit(response)
-	# Note: Don't emit lobby_joined here - let JS event dispatch handle it
-	# This prevents duplicate signals when game calls create_lobby()
+## Pre-4.4 fallback for JavaScriptBridge.js_buffer_to_packed_byte_array().
+## Takes a JS expression that evaluates to a Uint8Array, base64-encodes it on
+## the JS side, and decodes it back to a PackedByteArray in GDScript.
+func _js_buffer_to_packed_byte_array_b64(js_expr: String) -> PackedByteArray:
+	var b64 = JavaScriptBridge.eval(
+		"(function() {" +
+		"  var buf = %s;" % js_expr +
+		"  if (!buf || !buf.byteLength) return '';" +
+		"  var str = '';" +
+		"  for (var i = 0; i < buf.byteLength; i++)" +
+		"    str += String.fromCharCode(buf[i]);" +
+		"  return btoa(str);" +
+		"})()"
+	)
+	if b64 and b64 != "":
+		return Marshalls.base64_to_raw(b64)
+	return PackedByteArray()
 
-func _on_lobby_left_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	print("[WavedashSDK] Lobby left: ", response)
-	# Only clear cache if we left the lobby we're currently in (not if we already joined a new one)
-	if response.get("success", false) and response.get("data", "") == cached_lobby_id:
-		cached_lobby_id = ""
-		cached_lobby_host_id = ""
-	lobby_left.emit(response)
+func _create_js_callback(req_id: int) -> JavaScriptObject:
+	var cb = JavaScriptBridge.create_callback(func(args):
+		var response_json: String = args[0] if args.size() > 0 else ""
+		var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
+		_pending_results[req_id] = response
+		_request_resolved.emit(req_id)
+	)
+	_active_callbacks[req_id] = cb
+	return cb
 
-func _on_get_leaderboard_result_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	got_leaderboard.emit(response)
+func _await_request(req_id: int):
+	while not _pending_results.has(req_id):
+		await _request_resolved
+	var result = _pending_results[req_id]
+	_pending_results.erase(req_id)
+	_active_callbacks.erase(req_id)
+	return result
 
-func _on_get_leaderboard_entries_result_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	got_leaderboard_entries.emit(response)
+func _invoke_js(js_promise):
+	_next_request_id += 1
+	var req_id = _next_request_id
+	js_promise.then(_create_js_callback(req_id))
+	return await _await_request(req_id)
 
-func _on_post_leaderboard_score_result_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	posted_leaderboard_score.emit(response)
-
-func _on_create_ugc_item_result_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	ugc_item_created.emit(response)
-
-func _on_update_ugc_item_result_gd(args):
-	print("[WavedashSDK] UGC item updated: ", args)
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	ugc_item_updated.emit(response)
-
-func _on_download_ugc_item_result_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	ugc_item_downloaded.emit(response)
-
-func _on_download_remote_directory_result_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	remote_directory_downloaded.emit(response)
-
-func _on_download_remote_file_result_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	remote_file_downloaded.emit(response)
-
-func _on_upload_remote_file_result_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	remote_file_uploaded.emit(response)
-
-func _on_get_lobbies_result_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	print("[WavedashSDK] Got lobbies: ", response)
-	if response.get("success", false):
-		got_lobbies.emit(response.get("data", []))
-
-func _on_request_stats_result_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	print("[WavedashSDK] Got stats: ", response)
-	current_stats_received.emit(response)
-
-func _on_sent_lobby_invite_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	print("[WavedashSDK] Sent lobby invite: ", response)
-	sent_lobby_invite.emit(response)
-
-func _on_list_friends_result_gd(args):
-	var response_json: String = args[0] if args.size() > 0 else null
-	var response: Dictionary = JSON.parse_string(response_json) if response_json else {}
-	print("[WavedashSDK] Got friends: ", response)
-	got_friends.emit(response)
 
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
@@ -508,28 +654,26 @@ func _dispatch_js_event(args):
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] Lobby users updated: ", payload)
 			# Reset lobby host, might have changed when users shuffled
-			cached_lobby_host_id = ""
+			_cached_lobby_host_id = ""
 			lobby_users_updated.emit(data)
 		# All lobby join flows land here
-		# 1. create_lobby success -> LOBBY_JOINED with success=true
-		# 2. join_lobby success -> LOBBY_JOINED with success=true
-		# 3. External join (ie invite link) -> LOBBY_JOINED with success=true
-		# 4. join_lobby failure -> LOBBY_JOINED with success=false
+		# 1. create_lobby success -> LOBBY_JOINED
+		# 2. join_lobby success -> LOBBY_JOINED
+		# 3. External join (ie invite link) -> LOBBY_JOINED
 		Constants.JS_EVENT_LOBBY_JOINED:
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] Lobby joined: ", payload)
-			# Payload: { success, lobbyId, hostId?, users?, metadata?, message? }
-			if data.get("success", false):
-				cached_lobby_id = data.get("lobbyId", "")
-				cached_lobby_host_id = data.get("hostId", "")
+			# Payload: { lobbyId, hostId, users, metadata }
+			_cached_lobby_id = data.get("lobbyId", "")
+			_cached_lobby_host_id = data.get("hostId", "")
 			lobby_joined.emit(data)
 		Constants.JS_EVENT_LOBBY_KICKED:
 			var data = JSON.parse_string(payload)
 			# payload: { lobbyId, reason }
 			var reason = data.get("reason", Constants.LOBBY_KICKED_REASON_KICKED)
 			print("[WavedashSDK] Lobby kicked (reason: %s): %s" % [reason, payload])
-			cached_lobby_id = ""
-			cached_lobby_host_id = ""
+			_cached_lobby_id = ""
+			_cached_lobby_host_id = ""
 			lobby_kicked.emit(data)
 		Constants.JS_EVENT_LOBBY_INVITE:
 			var data = JSON.parse_string(payload)
@@ -547,6 +691,10 @@ func _dispatch_js_event(args):
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] P2P peer disconnected: ", payload)
 			p2p_peer_disconnected.emit(data)
+		Constants.JS_EVENT_STATS_STORED:
+			var data = JSON.parse_string(payload)
+			print("[WavedashSDK] Stats stored: ", payload)
+			stats_stored.emit(data)
 		Constants.JS_EVENT_BACKEND_CONNECTED:
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] Backend connected: ", payload)
@@ -597,28 +745,3 @@ func _decode_p2p_packet(data: PackedByteArray) -> Dictionary:
 		result["payload"] = PackedByteArray()
 	
 	return result
-	
-func request_stats() -> void:
-	if OS.get_name() == Constants.PLATFORM_WEB:
-		WavedashJS.requestStats().then(_on_request_stats_result_js)
-
-func set_stat_int(stat_name:String, val:int, store_now:bool) -> void:
-	if OS.get_name() == Constants.PLATFORM_WEB:
-		WavedashJS.setStat(stat_name, val)
-		if store_now:
-			WavedashJS.storeStats()
-
-func get_stat_int(stat_name: String) -> int:
-	if OS.get_name() == Constants.PLATFORM_WEB:
-		return WavedashJS.getStat(stat_name)
-	return -1
-
-func set_achievement(ach_name:String) -> void:
-	if OS.get_name() == Constants.PLATFORM_WEB:
-		WavedashJS.setAchievement(ach_name)
-		WavedashJS.storeStats()
-	
-func get_achievement(ach_name:String) -> bool:
-	if OS.get_name() == Constants.PLATFORM_WEB and WavedashJS:
-		return WavedashJS.getAchievement(ach_name)
-	return false
