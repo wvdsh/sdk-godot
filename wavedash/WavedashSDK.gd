@@ -53,6 +53,7 @@ signal p2p_connection_established(payload)
 signal p2p_connection_failed(payload)
 signal p2p_peer_disconnected(payload)
 signal current_stats_received(payload)
+signal stats_stored(payload)
 signal backend_connected(payload)
 signal backend_reconnecting(payload)
 signal backend_disconnected(payload)
@@ -673,6 +674,10 @@ func _dispatch_js_event(args):
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] P2P peer disconnected: ", payload)
 			p2p_peer_disconnected.emit(data)
+		Constants.JS_EVENT_STATS_STORED:
+			var data = JSON.parse_string(payload)
+			print("[WavedashSDK] Stats stored: ", payload)
+			stats_stored.emit(data)
 		Constants.JS_EVENT_BACKEND_CONNECTED:
 			var data = JSON.parse_string(payload)
 			print("[WavedashSDK] Backend connected: ", payload)
