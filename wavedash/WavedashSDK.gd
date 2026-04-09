@@ -539,7 +539,8 @@ func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel:
 		return false
 	# Copy bytes (1 bridge call per byte unfortunately, still faster than base64 encoding as long as payload is < 16KB)
 	for i in range(payload_size):
-		js_buffer[i] = payload[i]
+		# gdlint: ignore=unsafe_property_access
+		(js_buffer as Variant)[i] = payload[i]
 	if target_user_id == "":
 		# Broadcast to all peers
 		return WavedashJS.broadcastP2PMessage(channel, reliable, js_buffer, payload_size)
