@@ -1,5 +1,3 @@
-class_name WavedashConstants
-
 # Lobby Types
 const LOBBY_TYPE_PUBLIC = 0
 const LOBBY_TYPE_FRIENDS_ONLY = 1
