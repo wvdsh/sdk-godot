@@ -596,7 +596,7 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 	var messages: Array[Dictionary] = []
 	var raw_messages: PackedByteArray
 	if _has_js_buffer_transfer:
-		raw_messages = JavaScriptBridge.js_buffer_to_packed_byte_array(WavedashJS.drainP2PChannelToBuffer(channel))
+		raw_messages = JavaScriptBridge.call("js_buffer_to_packed_byte_array", WavedashJS.drainP2PChannelToBuffer(channel))
 	else:
 		raw_messages = _js_eval_to_packed_byte_array("WavedashJS.drainP2PChannelToBuffer(%d)" % channel)
 	if raw_messages.is_empty():
