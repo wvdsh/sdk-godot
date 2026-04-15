@@ -121,7 +121,15 @@ func get_user_id() -> String:
 		_fetch_user()
 	return _user_id
 
-func get_username() -> String:
+## Returns the username for the given user_id, or the current user's username if no user_id is provided.
+## Username will only be known if the game has seen the user either from a call to list_friends or from
+## being in a lobby with the user.
+func get_username(user_id: String = "") -> String:
+	if user_id != "":
+		if not _is_web or not WavedashJS:
+			return ""
+		var result = WavedashJS.getUsername(user_id)
+		return result if result else ""
 	if _username == "":
 		_fetch_user()
 	return _username
