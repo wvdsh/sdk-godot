@@ -45,6 +45,7 @@ signal lobby_users_updated(payload)
 signal lobby_kicked(payload)
 signal lobby_invite(payload)
 signal sent_lobby_invite(payload)
+signal got_lobby_invite_link(payload)
 signal got_lobbies(payload)
 signal got_leaderboard(payload)
 signal got_leaderboard_entries(payload)
@@ -483,8 +484,13 @@ func invite_user_to_lobby(lobby_id: String, user_id_to_invite: String):
 ## Response shape: { success, data: <url>, message }.
 func get_lobby_invite_link(copy_to_clipboard: bool = false):
 	if _is_web and WavedashJS:
-		return await _invoke_js(WavedashJS.getLobbyInviteLink(copy_to_clipboard))
-	return _web_unsupported("get_lobby_invite_link")
+		var result = await _invoke_js(WavedashJS.getLobbyInviteLink(copy_to_clipboard))
+		got_lobby_invite_link.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("get_lobby_invite_link")
+		got_lobby_invite_link.emit(result)
+		return result
 
 # User Generated Content (UGC) functions
 # TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
