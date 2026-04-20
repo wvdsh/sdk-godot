@@ -45,6 +45,7 @@ signal lobby_users_updated(payload)
 signal lobby_kicked(payload)
 signal lobby_invite(payload)
 signal sent_lobby_invite(payload)
+signal got_lobby_invite_link(payload)
 signal got_lobbies(payload)
 signal got_leaderboard(payload)
 signal got_leaderboard_entries(payload)
@@ -55,6 +56,7 @@ signal ugc_item_downloaded(payload)
 signal remote_file_downloaded(payload)
 signal remote_file_uploaded(payload)
 signal remote_directory_downloaded(payload)
+signal got_remote_directory_listing(payload)
 signal p2p_connection_established(payload)
 signal p2p_connection_failed(payload)
 signal p2p_peer_disconnected(payload)
@@ -319,6 +321,24 @@ func download_remote_directory(path: String):
 		remote_directory_downloaded.emit(result)
 		return result
 
+## Lists entries in a remote directory without downloading them.
+## Path must be under user:// or OS.get_user_data_dir().
+## Response shape: { success, data: [<metadata>], message }.
+func list_remote_directory(path: String):
+	path = _normalize_user_path(path)
+	if _is_web and WavedashJS:
+		if not _validate_user_data_path(path, "list_remote_directory"):
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with 'user://' or OS.get_user_data_dir()"}
+			got_remote_directory_listing.emit(err)
+			return err
+		var result = await _invoke_js(WavedashJS.listRemoteDirectory(path))
+		got_remote_directory_listing.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("list_remote_directory")
+		got_remote_directory_listing.emit(result)
+		return result
+
 func download_remote_file(file_path: String):
 	file_path = _normalize_user_path(file_path)
 	if _is_web and WavedashJS:
@@ -457,6 +477,19 @@ func invite_user_to_lobby(lobby_id: String, user_id_to_invite: String):
 	else:
 		var result = _web_unsupported("invite_user_to_lobby")
 		sent_lobby_invite.emit(result)
+		return result
+
+## Returns a shareable invite link for the current lobby.
+## When copy_to_clipboard is true, the launcher copies the link to the user's clipboard.
+## Response shape: { success, data: <url>, message }.
+func get_lobby_invite_link(copy_to_clipboard: bool = false):
+	if _is_web and WavedashJS:
+		var result = await _invoke_js(WavedashJS.getLobbyInviteLink(copy_to_clipboard))
+		got_lobby_invite_link.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("get_lobby_invite_link")
+		got_lobby_invite_link.emit(result)
 		return result
 
 # User Generated Content (UGC) functions
