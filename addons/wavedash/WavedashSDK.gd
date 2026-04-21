@@ -67,6 +67,7 @@ signal backend_reconnecting(payload)
 signal backend_disconnected(payload)
 signal user_avatar_loaded(texture: Texture2D, user_id: String)
 signal got_friends(payload)
+signal got_user_jwt(payload)
 
 func _log(msg: String) -> void:
 	if OS.is_debug_build():
@@ -135,6 +136,19 @@ func get_username(user_id: String = "") -> String:
 	if _username == "":
 		_fetch_user()
 	return _username
+
+## Returns the current user's gameplay JWT, fetching it if not already cached.
+## Use this to authenticate requests to your game's own backend, if you have one.
+## Response shape: { success, data: <jwt>, message }.
+func get_user_jwt():
+	if _is_web and WavedashJS:
+		var result = await _invoke_js(WavedashJS.getUserJwt())
+		got_user_jwt.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("get_user_jwt")
+		got_user_jwt.emit(result)
+		return result
 
 ## Returns the launch params that were passed via URL when the game was launched.
 ## {"lobby": "lobbyId123"}
