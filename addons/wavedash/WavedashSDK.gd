@@ -60,6 +60,9 @@ signal got_remote_directory_listing(payload)
 signal p2p_connection_established(payload)
 signal p2p_connection_failed(payload)
 signal p2p_peer_disconnected(payload)
+signal p2p_peer_reconnecting(payload)
+signal p2p_peer_reconnected(payload)
+signal p2p_packet_dropped(payload)
 signal current_stats_received(payload)
 signal stats_stored(payload)
 signal backend_connected(payload)
@@ -789,6 +792,18 @@ func _dispatch_js_event(args):
 			var data = JSON.parse_string(payload)
 			_log("P2P peer disconnected: %s" % str(payload))
 			p2p_peer_disconnected.emit(data)
+		Constants.JS_EVENT_P2P_PEER_RECONNECTING:
+			var data = JSON.parse_string(payload)
+			_log("P2P peer reconnecting: %s" % str(payload))
+			p2p_peer_reconnecting.emit(data)
+		Constants.JS_EVENT_P2P_PEER_RECONNECTED:
+			var data = JSON.parse_string(payload)
+			_log("P2P peer reconnected: %s" % str(payload))
+			p2p_peer_reconnected.emit(data)
+		Constants.JS_EVENT_P2P_PACKET_DROPPED:
+			var data = JSON.parse_string(payload)
+			_log("P2P packet dropped: %s" % str(payload))
+			p2p_packet_dropped.emit(data)
 		Constants.JS_EVENT_STATS_STORED:
 			var data = JSON.parse_string(payload)
 			_log("Stats stored: %s" % str(payload))
