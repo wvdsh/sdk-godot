@@ -287,7 +287,11 @@ func get_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, fr
 
 func post_leaderboard_score(leaderboard_id: String, score: int, keep_best: bool, ugc_id: String = ""):
 	if _is_web and WavedashJS:
-		var result = await _invoke_js(WavedashJS.uploadLeaderboardScore(leaderboard_id, score, keep_best, ugc_id))
+		var result
+		if ugc_id == "":
+			result = await _invoke_js(WavedashJS.uploadLeaderboardScore(leaderboard_id, score, keep_best))
+		else:
+			result = await _invoke_js(WavedashJS.uploadLeaderboardScore(leaderboard_id, score, keep_best, ugc_id))
 		posted_leaderboard_score.emit(result)
 		return result
 	else:
