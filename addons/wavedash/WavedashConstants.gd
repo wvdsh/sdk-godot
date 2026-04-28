@@ -1,8 +1,3 @@
-# Lobby Types
-const LOBBY_TYPE_PUBLIC = 0
-const LOBBY_TYPE_FRIENDS_ONLY = 1
-const LOBBY_TYPE_PRIVATE = 2
-
 # Broadcast Event Types
 const JS_EVENT_LOBBY_MESSAGE = "LobbyMessage"
 const JS_EVENT_LOBBY_JOINED = "LobbyJoined"
@@ -20,6 +15,7 @@ const JS_EVENT_STATS_STORED = "StatsStored"
 const JS_EVENT_BACKEND_CONNECTED = "BackendConnected"
 const JS_EVENT_BACKEND_RECONNECTING = "BackendReconnecting"
 const JS_EVENT_BACKEND_DISCONNECTED = "BackendDisconnected"
+const JS_EVENT_FULLSCREEN_CHANGED = "FullscreenChanged"
 
 
 # Platform Types
@@ -51,9 +47,9 @@ const UGC_VISIBILITY_FRIENDS_ONLY = 1
 const UGC_VISIBILITY_PRIVATE = 2
 
 # Avatar Sizes
-const AVATAR_SIZE_SMALL = 0   # 64x64 - Lists, chat bubbles
-const AVATAR_SIZE_MEDIUM = 1  # 128x128 - Profile cards
-const AVATAR_SIZE_LARGE = 2   # 256x256 - Large displays
+const AVATAR_SIZE_SMALL = 64   # 64x64 - Lists, chat bubbles
+const AVATAR_SIZE_MEDIUM = 128  # 128x128 - Profile cards
+const AVATAR_SIZE_LARGE = 256   # 256x256 - Large displays
 
 # Lobby Visibility
 const LOBBY_VISIBILITY_PUBLIC = 0
