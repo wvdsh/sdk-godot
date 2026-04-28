@@ -71,6 +71,7 @@ signal backend_disconnected(payload)
 signal user_avatar_loaded(texture: Texture2D, user_id: String)
 signal got_friends(payload)
 signal got_user_jwt(payload)
+signal fullscreen_changed(payload)
 
 func _log(msg: String) -> void:
 	if OS.is_debug_build():
@@ -111,6 +112,30 @@ func ready_for_events() -> void:
 func toggle_overlay() -> void:
 	if _is_web and WavedashJS:
 		WavedashJS.toggleOverlay()
+
+## Whether the game is currently presented in fullscreen.
+## Mirrored from the Wavedash host page, which owns the real fullscreen target.
+func is_fullscreen() -> bool:
+	if _is_web and WavedashJS:
+		return WavedashJS.isFullscreen()
+	return false
+
+## Ask the host page to enter (true) or exit (false) fullscreen.
+## Entering must happen inside a user-gesture handler (e.g. an InputEvent
+## triggered by a keypress or mouse click) for the browser to permit it.
+## Returns true if the host reports the operation succeeded, false otherwise.
+func request_fullscreen(fullscreen: bool) -> bool:
+	if _is_web and WavedashJS:
+		return await _invoke_js_returning_bool(WavedashJS.requestFullscreen(fullscreen))
+	return false
+
+## Toggle fullscreen. Like request_fullscreen(true), this must run inside a
+## user-gesture handler when entering fullscreen.
+## Returns true if the host reports the operation succeeded, false otherwise.
+func toggle_fullscreen() -> bool:
+	if _is_web and WavedashJS:
+		return await _invoke_js_returning_bool(WavedashJS.toggleFullscreen())
+	return false
 
 func _fetch_user() -> Dictionary:
 	if _cached_user.is_empty() and _is_web and WavedashJS:
@@ -740,6 +765,24 @@ func _invoke_js(js_promise):
 	js_promise.then(_create_js_callback(req_id))
 	return await _await_request(req_id)
 
+# For JS calls that resolve to a raw boolean rather than a {success, data, message}
+# JSON envelope (e.g. requestFullscreen / toggleFullscreen).
+func _invoke_js_returning_bool(js_promise) -> bool:
+	_next_request_id += 1
+	var req_id = _next_request_id
+	var cb = JavaScriptBridge.create_callback(func(args):
+		_pending_results[req_id] = args[0] if args.size() > 0 else false
+		_request_resolved.emit(req_id)
+	)
+	_active_callbacks[req_id] = cb
+	js_promise.then(cb)
+	while not _pending_results.has(req_id):
+		await _request_resolved
+	var result = _pending_results[req_id]
+	_pending_results.erase(req_id)
+	_active_callbacks.erase(req_id)
+	return bool(result)
+
 
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
@@ -824,6 +867,10 @@ func _dispatch_js_event(args):
 			var data = JSON.parse_string(payload)
 			_log("Backend disconnected: %s" % str(payload))
 			backend_disconnected.emit(data)
+		Constants.JS_EVENT_FULLSCREEN_CHANGED:
+			var data = JSON.parse_string(payload)
+			_log("Fullscreen changed: %s" % str(payload))
+			fullscreen_changed.emit(data)
 		_:
 			push_warning("[WavedashSDK] Received unknown event from JS: " + method_name)
 
