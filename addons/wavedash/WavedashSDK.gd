@@ -53,8 +53,11 @@ signal posted_leaderboard_score(payload)
 signal ugc_item_created(payload)
 signal ugc_item_updated(payload)
 signal ugc_item_downloaded(payload)
+signal ugc_item_deleted(payload)
 signal remote_file_downloaded(payload)
 signal remote_file_uploaded(payload)
+signal remote_file_deleted(payload)
+signal got_remote_file_exists(payload)
 signal remote_directory_downloaded(payload)
 signal got_remote_directory_listing(payload)
 signal p2p_connection_established(payload)
@@ -400,6 +403,24 @@ func download_remote_file(file_path: String):
 		remote_file_downloaded.emit(result)
 		return result
 
+## Checks whether a remote file exists. Sends a lightweight HEAD request.
+## Path must be under user:// or OS.get_user_data_dir().
+## Response shape: { success, data: <bool>, message }.
+func remote_file_exists(file_path: String):
+	file_path = _normalize_user_path(file_path)
+	if _is_web and WavedashJS:
+		if not _validate_user_data_path(file_path, "remote_file_exists"):
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with 'user://' or OS.get_user_data_dir()"}
+			got_remote_file_exists.emit(err)
+			return err
+		var result = await _invoke_js(WavedashJS.remoteFileExists(file_path))
+		got_remote_file_exists.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("remote_file_exists")
+		got_remote_file_exists.emit(result)
+		return result
+
 func upload_remote_file(file_path: String):
 	file_path = _normalize_user_path(file_path)
 	if _is_web and WavedashJS:
@@ -413,6 +434,24 @@ func upload_remote_file(file_path: String):
 	else:
 		var result = _web_unsupported("upload_remote_file")
 		remote_file_uploaded.emit(result)
+		return result
+
+## Deletes a remote file from cloud storage.
+## Path must be under user:// or OS.get_user_data_dir().
+## Response shape: { success, data: <file_path>, message }.
+func delete_remote_file(file_path: String):
+	file_path = _normalize_user_path(file_path)
+	if _is_web and WavedashJS:
+		if not _validate_user_data_path(file_path, "delete_remote_file"):
+			var err = {"success": false, "data": null, "message": "Invalid path: must start with 'user://' or OS.get_user_data_dir()"}
+			remote_file_deleted.emit(err)
+			return err
+		var result = await _invoke_js(WavedashJS.deleteRemoteFile(file_path))
+		remote_file_deleted.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("delete_remote_file")
+		remote_file_deleted.emit(result)
 		return result
 
 ## Requests to join a lobby. Returns true if the request was accepted.
@@ -571,6 +610,19 @@ func update_ugc_item(ugc_id: String, title: String = "", description: String = "
 	else:
 		var result = _web_unsupported("update_ugc_item")
 		ugc_item_updated.emit(result)
+		return result
+
+## Deletes a UGC item: removes the item from the game's UGC collection and frees up the
+## user's storage quota by the size of the deleted upload.
+## Response shape: { success, data: <ugc_id>, message }.
+func delete_ugc_item(ugc_id: String):
+	if _is_web and WavedashJS:
+		var result = await _invoke_js(WavedashJS.deleteUGCItem(ugc_id))
+		ugc_item_deleted.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("delete_ugc_item")
+		ugc_item_deleted.emit(result)
 		return result
 
 func download_ugc_item(ugc_id: String, local_file_path: String):
