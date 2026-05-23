@@ -43,7 +43,6 @@ const UGC_TYPE_OTHER = 4
 
 # UGC Visibility
 const UGC_VISIBILITY_PUBLIC = 0
-const UGC_VISIBILITY_FRIENDS_ONLY = 1
 const UGC_VISIBILITY_PRIVATE = 2
 
 # Avatar Sizes
