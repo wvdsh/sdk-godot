@@ -54,6 +54,7 @@ signal ugc_item_created(payload)
 signal ugc_item_updated(payload)
 signal ugc_item_downloaded(payload)
 signal ugc_item_deleted(payload)
+signal got_ugc_items(payload)
 signal remote_file_downloaded(payload)
 signal remote_file_uploaded(payload)
 signal remote_file_deleted(payload)
@@ -596,15 +597,19 @@ func create_ugc_item(ugcType: int, title: String = "", description: String = "",
 		ugc_item_created.emit(result)
 		return result
 
-func update_ugc_item(ugc_id: String, title: String = "", description: String = "", visibility: int = Constants.UGC_VISIBILITY_PUBLIC, local_file_path: Variant = null):
-	if local_file_path != null:
-		local_file_path = _normalize_user_path(local_file_path)
+## Updates an existing UGC item. Pass any subset of fields to update.
+## Supported keys: "title" (String), "description" (String),
+## "visibility" (int — one of Constants.UGC_VISIBILITY_*), "filePath" (String — user:// path).
+## Response shape: { success, data: <ugc_id>, message }.
+func update_ugc_item(ugc_id: String, updates: Dictionary = {}):
+	if updates.has("filePath") and updates["filePath"] != null:
+		updates["filePath"] = _normalize_user_path(updates["filePath"])
 	if _is_web and WavedashJS:
-		if local_file_path != null and not _validate_user_data_path(local_file_path, "update_ugc_item"):
+		if updates.has("filePath") and updates["filePath"] != null and not _validate_user_data_path(updates["filePath"], "update_ugc_item"):
 			var err = {"success": false, "data": null, "message": "Invalid path: must start with 'user://' or OS.get_user_data_dir()"}
 			ugc_item_updated.emit(err)
 			return err
-		var result = await _invoke_js(WavedashJS.updateUGCItem(ugc_id, title, description, visibility, local_file_path))
+		var result = await _invoke_js(WavedashJS.updateUGCItem(ugc_id, JSON.stringify(updates)))
 		ugc_item_updated.emit(result)
 		return result
 	else:
@@ -623,6 +628,21 @@ func delete_ugc_item(ugc_id: String):
 	else:
 		var result = _web_unsupported("delete_ugc_item")
 		ugc_item_deleted.emit(result)
+		return result
+
+## Lists UGC items with optional filters and pagination.
+## First page args: "createdBy" (String — user id), "ugcType" (int — one of
+##   Constants.UGC_TYPE_*), "titleSearch" (String), "numItems" (int).
+## Subsequent pages: pass ONLY "continueCursor".
+## Response shape: { success, data: { page, isDone, continueCursor }, message }.
+func list_ugc_items(args: Dictionary = {}):
+	if _is_web and WavedashJS:
+		var result = await _invoke_js(WavedashJS.listUGCItems(JSON.stringify(args)))
+		got_ugc_items.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("list_ugc_items")
+		got_ugc_items.emit(result)
 		return result
 
 func download_ugc_item(ugc_id: String, local_file_path: String):
