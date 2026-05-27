@@ -76,6 +76,7 @@ signal user_avatar_loaded(texture: Texture2D, user_id: String)
 signal got_friends(payload)
 signal got_user_jwt(payload)
 signal fullscreen_changed(payload)
+signal user_presence_updated(payload)
 
 func _log(msg: String) -> void:
 	if OS.is_debug_build():
@@ -704,6 +705,22 @@ func get_achievement(ach_name:String) -> bool:
 	if _is_web and WavedashJS:
 		return WavedashJS.getAchievement(ach_name)
 	return false
+
+## Updates rich user presence so friends can see what the player is doing in game.
+## Supported keys:
+##   "status"  — one-line activity shown as the primary line (e.g. "Traveling in a group")
+##   "details" — secondary context shown beneath the status (e.g. current zone or mode)
+## Pass an empty dictionary to clear all presence fields.
+## Response shape: { success, data: <bool>, message }.
+func update_user_presence(data: Dictionary):
+	if _is_web and WavedashJS:
+		var result = await _invoke_js(WavedashJS.updateUserPresence(JSON.stringify(data)))
+		user_presence_updated.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("update_user_presence")
+		user_presence_updated.emit(result)
+		return result
 
 # P2P messaging
 # Send a P2P message from Godot. JS will only send the message if the peer is ready to receive
