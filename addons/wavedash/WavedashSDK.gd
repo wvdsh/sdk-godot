@@ -710,8 +710,7 @@ func get_achievement(ach_name:String) -> bool:
 ## Supported keys:
 ##   "status"  — one-line activity shown as the primary line (e.g. "Traveling in a group")
 ##   "details" — secondary context shown beneath the status (e.g. current zone or mode)
-## Values must be String or null. Pass `null` for an individual key to clear that field.
-## Pass an empty dictionary to send a heartbeat without changing fields.
+## Pass an empty dictionary to clear all presence fields.
 ## Response shape: { success, data: <bool>, message }.
 func update_user_presence(data: Dictionary):
 	if _is_web and WavedashJS:
