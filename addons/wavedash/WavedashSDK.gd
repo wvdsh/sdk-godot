@@ -76,6 +76,7 @@ signal user_avatar_loaded(texture: Texture2D, user_id: String)
 signal got_friends(payload)
 signal got_user_jwt(payload)
 signal fullscreen_changed(payload)
+signal mute_changed(payload)
 signal user_presence_updated(payload)
 
 func _log(msg: String) -> void:
@@ -960,6 +961,10 @@ func _dispatch_js_event(args):
 			var data = JSON.parse_string(payload)
 			_log("Fullscreen changed: %s" % str(payload))
 			fullscreen_changed.emit(data)
+		Constants.JS_EVENT_MUTE_CHANGED:
+			var data = JSON.parse_string(payload)
+			_log("Mute changed: %s" % str(payload))
+			mute_changed.emit(data)
 		_:
 			push_warning("[WavedashSDK] Received unknown event from JS: " + method_name)
 
