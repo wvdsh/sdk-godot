@@ -143,6 +143,28 @@ func toggle_fullscreen() -> bool:
 		return await _invoke_js_returning_bool(WavedashJS.toggleFullscreen())
 	return false
 
+## Whether the game is currently muted.
+## Mirrored from the Wavedash host page, which owns the mute control
+func is_muted() -> bool:
+	if _is_web and WavedashJS:
+		return WavedashJS.isMuted()
+	return false
+
+## Ask the host to mute (true) or unmute (false). Returns true if the change was
+## applied, false if it was rejected — the host won't let the game unmute when
+## the player has explicitly muted from the Wavedash UI.
+func request_mute(muted: bool) -> bool:
+	if _is_web and WavedashJS:
+		return await _invoke_js_returning_bool(WavedashJS.requestMute(muted))
+	return false
+
+## Toggle mute. Returns true if the change was applied, false if it was rejected
+## (e.g. false if trying to unmute over an explicit player mute).
+func toggle_mute() -> bool:
+	if _is_web and WavedashJS:
+		return await _invoke_js_returning_bool(WavedashJS.toggleMute())
+	return false
+
 func _fetch_user() -> Dictionary:
 	if _cached_user.is_empty() and _is_web and WavedashJS:
 		_cached_user = JSON.parse_string(WavedashJS.getUser())
