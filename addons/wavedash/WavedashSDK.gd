@@ -78,6 +78,9 @@ signal got_user_jwt(payload)
 signal fullscreen_changed(payload)
 signal mute_changed(payload)
 signal user_presence_updated(payload)
+signal got_is_entitled(payload)
+signal got_entitlements(payload)
+signal paywall_resolved(payload)
 
 func _log(msg: String) -> void:
 	if OS.is_debug_build():
@@ -743,6 +746,55 @@ func update_user_presence(data: Dictionary):
 	else:
 		var result = _web_unsupported("update_user_presence")
 		user_presence_updated.emit(result)
+		return result
+
+## Returns true if the player owns the given paid content for this game.
+## Reads the `entitlements` claim from the gameplay JWT — this is a UX hint, not a
+## security check. The builds server re-verifies the JWT signature and gates
+## paid asset bytes on every request, so a tampered client return value
+## doesn't actually unlock anything. Pair with trigger_paywall() to drive
+## in-game UI.
+## Response shape: { success, data: <bool>, message }.
+func is_entitled(content_identifier: String):
+	if _is_web and WavedashJS:
+		var result = await _invoke_js(WavedashJS.isEntitled(content_identifier))
+		got_is_entitled.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("is_entitled")
+		got_is_entitled.emit(result)
+		return result
+
+## Returns the full list of paid-content identifiers the player owns for this game.
+## Reads the `entitlements` claim from the gameplay JWT — this is a UX hint,
+## not a security check (see is_entitled). Useful for access gating multiple
+## items at once without a call per content identifier.
+## Response shape: { success, data: [<string>], message }.
+func get_entitlements():
+	if _is_web and WavedashJS:
+		var result = await _invoke_js(WavedashJS.getEntitlements())
+		got_entitlements.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("get_entitlements")
+		got_entitlements.emit(result)
+		return result
+
+## Trigger the Wavedash-rendered paywall flow for the given content. Resolves
+## immediately with data `true` if the player already owns it; otherwise
+## opens the modal and resolves with whether the user completed the purchase.
+## After a successful purchase the JWT is refreshed automatically so a
+## subsequent resource fetch is authenticated with the new purchase, and is_entitled
+## will return true if the purchase was successful.
+## Response shape: { success, data: <bool>, message }.
+func trigger_paywall(content_identifier: String):
+	if _is_web and WavedashJS:
+		var result = await _invoke_js(WavedashJS.triggerPaywall(content_identifier))
+		paywall_resolved.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("trigger_paywall")
+		paywall_resolved.emit(result)
 		return result
 
 # P2P messaging
