@@ -1,0 +1,21 @@
+name: Notify mono
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    env:
+      TOKEN: ${{ secrets.MONO_SYNC_TOKEN }}
+    steps:
+      # Skip until the secret exists, so the job stays green during setup.
+      - name: Ping wvdsh/mono to bump submodules
+        if: ${{ env.TOKEN != '' }}
+        run: |
+          curl -sS --fail -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $TOKEN" \
+            https://api.github.com/repos/wvdsh/mono/dispatches \
+            -d "{\"event_type\":\"submodule-updated\",\"client_payload\":{\"repo\":\"${{ github.repository }}\",\"sha\":\"${{ github.sha }}\"}}"
