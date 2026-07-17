@@ -47,6 +47,7 @@ signal lobby_invite(payload)
 signal sent_lobby_invite(payload)
 signal got_lobby_invite_link(payload)
 signal got_lobbies(payload)
+signal got_lobby(payload)
 signal got_leaderboard(payload)
 signal got_leaderboard_entries(payload)
 signal posted_leaderboard_score(payload)
@@ -511,6 +512,18 @@ func list_available_lobbies():
 	else:
 		var result = _web_unsupported("list_available_lobbies")
 		got_lobbies.emit(result)
+		return result
+
+## Fetches a lobby by ID.
+## Response shape: { success, data: <lobby>, message }.
+func get_lobby(lobby_id: String):
+	if _is_web and WavedashJS:
+		var result = await _invoke_js(WavedashJS.getLobby(lobby_id))
+		got_lobby.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("get_lobby")
+		got_lobby.emit(result)
 		return result
 
 func get_lobby_host_id(lobby_id: String) -> String:
