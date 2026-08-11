@@ -342,13 +342,22 @@ func get_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, fr
 		got_leaderboard_entries.emit(result)
 		return result
 
-func post_leaderboard_score(leaderboard_id: String, score: int, keep_best: bool, ugc_id: String = ""):
+## Posts a score to a leaderboard.
+## Pass ugc_id to attach a UGC item (e.g. a replay) to the entry, or "" for none.
+## metadata attaches small key/value data to the entry — String, int and float values
+## only (e.g. {"character": "knight", "deaths": 3}).
+## Store larger payloads as UGC and attach them via ugc_id instead.
+## Metadata belongs to the score it was submitted with: a score that gets written
+## replaces it, and an empty dictionary clears it. A score that keep_best rejects leaves
+## the existing entry — metadata included — untouched.
+## Response shape: { success, data: { entry, submission, totalEntries }, message },
+## where entry carries the persisted metadata back.
+func post_leaderboard_score(leaderboard_id: String, score: int, keep_best: bool, ugc_id: String = "", metadata: Dictionary = {}):
 	if _is_web and WavedashJS:
-		var result
-		if ugc_id == "":
-			result = await _invoke_js(WavedashJS.uploadLeaderboardScore(leaderboard_id, score, keep_best))
-		else:
-			result = await _invoke_js(WavedashJS.uploadLeaderboardScore(leaderboard_id, score, keep_best, ugc_id))
+		# The JS SDK parses the metadata JSON string, and reads null as an omitted argument.
+		var js_ugc_id = ugc_id if ugc_id != "" else null
+		var js_metadata = JSON.stringify(metadata) if not metadata.is_empty() else null
+		var result = await _invoke_js(WavedashJS.uploadLeaderboardScore(leaderboard_id, score, keep_best, js_ugc_id, js_metadata))
 		posted_leaderboard_score.emit(result)
 		return result
 	else:
@@ -739,7 +748,7 @@ func set_achievement(ach_name: String, store_now: bool = false) -> bool:
 	if _is_web and WavedashJS:
 		return WavedashJS.setAchievement(ach_name, store_now)
 	return false
-	
+
 func get_achievement(ach_name:String) -> bool:
 	if _is_web and WavedashJS:
 		return WavedashJS.getAchievement(ach_name)
@@ -816,11 +825,11 @@ func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel:
 	if payload.size() == 0:
 		push_warning("Dropping empty P2P message")
 		return false
-	
+
 	# Tried a few options here for getting a Godot PackedByteArray across the JS barrier into a Uint8Array.
 	# Logging them for clarity, Option 4 is the best for < 16KB payloads
 	# (TODO: Pass a direct view into the Godot WASM heap if Godot ever supports it the way Unity JSLib does)
-	
+
 	# Option 1: Can we get our PackedByteArray across the JS barrier into a Uint8Array? Godot doesn't support this natively
 	# var js_array = JavaScriptBridge.create_object("Uint8Array", payload)
 
@@ -856,7 +865,7 @@ func send_p2p_message(target_user_id: String, payload: PackedByteArray, channel:
 func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 	if not _is_web or not WavedashJS:
 		return []
-	
+
 	var messages: Array[Dictionary] = []
 	var raw_messages: PackedByteArray
 	if _has_js_buffer_transfer:
@@ -881,7 +890,7 @@ func drain_p2p_channel(channel: int) -> Array[Dictionary]:
 		else:
 			push_warning("P2P message is malformed, dropping message")
 			continue
-	
+
 	return messages
 
 ## Pre-4.4 fallback for JavaScriptBridge.js_buffer_to_packed_byte_array().
@@ -1061,10 +1070,10 @@ func _decode_p2p_packet(data: PackedByteArray) -> Dictionary:
 	# Binary format: [fromUserId(32)][channel(4)][dataLength(4)][payload(...)]
 	if data.size() < 40:  # Minimum size for header
 		return {}
-	
+
 	var result = {}
 	var offset = 0
-	
+
 	# fromUserId (32 bytes, null-padded)
 	var from_user_bytes = data.slice(offset, offset + 32)
 	# Find first null byte to avoid Godot's Unicode warning when converting
@@ -1073,20 +1082,20 @@ func _decode_p2p_packet(data: PackedByteArray) -> Dictionary:
 		from_user_bytes = from_user_bytes.slice(0, null_pos)
 	result["identity"] = from_user_bytes.get_string_from_ascii()
 	offset += 32
-	
+
 	# channel (4 bytes, little-endian)
 	var channel = data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24)
 	result["channel"] = channel
 	offset += 4
-	
+
 	# dataLength (4 bytes, little-endian)
 	var payload_length = data[offset] | (data[offset + 1] << 8) | (data[offset + 2] << 16) | (data[offset + 3] << 24)
 	offset += 4
-	
+
 	# payload (variable length)
 	if payload_length > 0 and offset + payload_length <= data.size():
 		result["payload"] = data.slice(offset, offset + payload_length)
 	else:
 		result["payload"] = PackedByteArray()
-	
+
 	return result
