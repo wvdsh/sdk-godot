@@ -85,7 +85,6 @@ signal got_is_entitled(payload)
 signal got_entitlements(payload)
 signal paywall_resolved(payload)
 signal content_downloaded(payload)
-signal content_pack_downloaded(payload)
 
 func _log(msg: String) -> void:
 	if OS.is_debug_build():
@@ -848,14 +847,14 @@ func _content_url(item_path: String) -> String:
 func _content_error(message: String, code: int = 0, content_identifiers: Array = []) -> Dictionary:
 	return {"success": false, "data": null, "message": message, "code": code, "content_identifiers": content_identifiers}
 
-func _fetch_content(item_path: String, local_path: String, func_name: String):
+func _fetch_content(item_path: String, local_path: String):
 	if not _is_web:
-		var unsupported = _web_unsupported(func_name)
+		var unsupported = _web_unsupported("download_content")
 		unsupported["code"] = 0
 		unsupported["content_identifiers"] = []
 		return unsupported
 
-	if not _validate_item_path(item_path, func_name):
+	if not _validate_item_path(item_path, "download_content"):
 		return _content_error("Invalid item_path: must be relative to your build root, e.g. 'dlc/full.pck'")
 
 	if _builds_origin.is_empty():
@@ -866,7 +865,7 @@ func _fetch_content(item_path: String, local_path: String, func_name: String):
 		dest_path = "user://" + item_path
 
 	var url = _content_url(item_path)
-	_log("%s: fetching %s" % [func_name, url])
+	_log("download_content: fetching %s" % url)
 
 	var http = HTTPRequest.new()
 	add_child(http)
@@ -912,7 +911,7 @@ func _fetch_content(item_path: String, local_path: String, func_name: String):
 	file.store_buffer(body)
 	file.close()
 
-	_log("%s: saved %d bytes to %s" % [func_name, body.size(), dest_path])
+	_log("download_content: saved %d bytes to %s" % [body.size(), dest_path])
 	# gdlint: ignore=max-returns
 	return {"success": true, "data": dest_path, "message": "", "code": response_code, "content_identifiers": []}
 
@@ -927,34 +926,13 @@ func _fetch_content(item_path: String, local_path: String, func_name: String):
 ## `code` is the HTTP status, or 0 if the request never completed. On 403 the file
 ## is behind a paywall and `content_identifiers` lists what the player must own -
 ## pass one to trigger_paywall().
+## To mount a downloaded .pck, hand the returned path to Godot:
+##     var result = await WavedashSDK.download_content("dlc/full.pck")
+##     if result.success:
+##         ProjectSettings.load_resource_pack(result.data)
 func download_content(item_path: String, local_path: String = ""):
-	var result = await _fetch_content(item_path, local_path, "download_content")
+	var result = await _fetch_content(item_path, local_path)
 	content_downloaded.emit(result)
-	return result
-
-## Downloads a resource pack the way download_content() does, then mounts it with
-## ProjectSettings.load_resource_pack() so its files are reachable through res://.
-## Only for Godot resource packs (.pck/.zip) - for anything else call
-## download_content() and read the file yourself.
-## Response shape: { success, data: <local path>, message, code, content_identifiers }.
-## `code` is the HTTP status, or 0 if the request never completed. On 403 the pack
-## is behind a paywall and `content_identifiers` lists what the player must own -
-## pass one to trigger_paywall(). A pack that downloads but doesn't mount reports
-## success false with the HTTP status it was fetched with.
-func download_content_pack(item_path: String, local_path: String = ""):
-	var result = await _fetch_content(item_path, local_path, "download_content_pack")
-	if not result.get("success", false):
-		content_pack_downloaded.emit(result)
-		return result
-
-	var pack_path = result.get("data", "")
-	if not ProjectSettings.load_resource_pack(pack_path):
-		var err = _content_error("Downloaded '%s' but it could not be loaded as a resource pack" % pack_path, result.get("code", 0))
-		content_pack_downloaded.emit(err)
-		return err
-
-	_log("download_content_pack: mounted %s" % pack_path)
-	content_pack_downloaded.emit(result)
 	return result
 
 # P2P messaging
