@@ -1,0 +1,169 @@
+[gd_scene format=3 uid="uid://bcdw02iuyd335"]
+
+[ext_resource type="Script" path="res://addons/wavedash/editor/wavedash_editor.gd" id="1_emu3r"]
+[ext_resource type="Script" path="res://addons/wavedash/editor/wavedash_cli_row.gd" id="2_cli_row"]
+[ext_resource type="Script" path="res://addons/wavedash/editor/wavedash_preset_row.gd" id="3_preset_row"]
+[ext_resource type="Texture2D" path="res://addons/wavedash/editor/assets/refresh_cw_white.svg" id="4_4ifc6"]
+[ext_resource type="Script" path="res://addons/wavedash/editor/wavedash_auth_row.gd" id="4_auth_row"]
+[ext_resource type="Texture2D" path="res://addons/wavedash/editor/assets/log_out_white.svg" id="5_onx8f"]
+[ext_resource type="Script" path="res://addons/wavedash/editor/wavedash_project_row.gd" id="5_project_row"]
+[ext_resource type="Script" path="res://addons/wavedash/editor/wavedash_build_upload_row.gd" id="6_build_row"]
+[ext_resource type="Texture2D" path="res://addons/wavedash/editor/assets/wrench_white.svg" id="7_4nw3a"]
+[ext_resource type="Texture2D" path="res://addons/wavedash/editor/assets/cloud_upload_white.svg" id="7_y4u7f"]
+
+[node name="WavedashEditor" type="MarginContainer" unique_id=2001152905]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme_override_constants/margin_left = 8
+theme_override_constants/margin_top = 8
+theme_override_constants/margin_right = 8
+theme_override_constants/margin_bottom = 8
+script = ExtResource("1_emu3r")
+
+[node name="VBoxContainer" type="VBoxContainer" parent="." unique_id=1143477893]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="CliRow" type="HBoxContainer" parent="VBoxContainer" unique_id=2074826505]
+unique_name_in_owner = true
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+script = ExtResource("2_cli_row")
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer/CliRow" unique_id=1583275746]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Wavedash CLI"
+clip_text = true
+
+[node name="ActionButton" type="Button" parent="VBoxContainer/CliRow" unique_id=2106855913]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Install"
+clip_text = true
+
+[node name="UpdateButton" type="Button" parent="VBoxContainer/CliRow" unique_id=1657681139]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Update Now"
+clip_text = true
+
+[node name="AuthRow" type="HBoxContainer" parent="VBoxContainer" unique_id=22921060]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+script = ExtResource("4_auth_row")
+
+[node name="SignInStatus" type="Label" parent="VBoxContainer/AuthRow" unique_id=729105242]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Wavedash account"
+clip_text = true
+
+[node name="Buttons" type="HBoxContainer" parent="VBoxContainer/AuthRow" unique_id=105680516]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="ActionButton" type="Button" parent="VBoxContainer/AuthRow/Buttons" unique_id=1447586565]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Sign In"
+icon = ExtResource("4_4ifc6")
+clip_text = true
+
+[node name="LogoutButton" type="Button" parent="VBoxContainer/AuthRow/Buttons" unique_id=85176396]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Log Out"
+icon = ExtResource("5_onx8f")
+clip_text = true
+
+[node name="ProjectRow" type="HBoxContainer" parent="VBoxContainer" unique_id=1784352029]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+script = ExtResource("5_project_row")
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer/ProjectRow" unique_id=1925070290]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Game"
+clip_text = true
+
+[node name="ActionButton" type="Button" parent="VBoxContainer/ProjectRow" unique_id=992181853]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Change..."
+icon = ExtResource("7_4nw3a")
+clip_text = true
+
+[node name="PresetRow" type="HBoxContainer" parent="VBoxContainer" unique_id=1842031700]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+script = ExtResource("3_preset_row")
+
+[node name="Label" type="Label" parent="VBoxContainer/PresetRow" unique_id=1140005785]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Export preset:"
+clip_text = true
+
+[node name="Dropdown" type="OptionButton" parent="VBoxContainer/PresetRow" unique_id=864338044]
+visible = false
+layout_mode = 2
+size_flags_horizontal = 3
+clip_text = true
+
+[node name="NoneFoundLabel" type="Label" parent="VBoxContainer/PresetRow" unique_id=601688730]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "None found"
+clip_text = true
+
+[node name="CreateDefaultButton" type="Button" parent="VBoxContainer" unique_id=1825759618]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Create New Wavedash Export"
+clip_text = true
+
+[node name="BuildUploadRow" type="VBoxContainer" parent="VBoxContainer" unique_id=1545626711]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_constants/separation = 8
+script = ExtResource("6_build_row")
+
+[node name="ActionButton" type="Button" parent="VBoxContainer/BuildUploadRow" unique_id=933288051]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Push Build..."
+icon = ExtResource("7_y4u7f")
+clip_text = true
+
+[node name="StatusLabel" type="Label" parent="VBoxContainer/BuildUploadRow" unique_id=195889903]
+custom_minimum_size = Vector2(120, 0)
+layout_mode = 2
+size_flags_horizontal = 3
+autowrap_mode = 3
+
+[node name="OutputLabel" type="Label" parent="VBoxContainer" unique_id=1068268387]
+layout_mode = 2
+text = "Output"
+clip_text = true
+
+[node name="OutputLog" type="RichTextLabel" parent="VBoxContainer" unique_id=865781554]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(0, 160)
+layout_mode = 2
+size_flags_vertical = 3
+focus_mode = 2
+scroll_following = true
+context_menu_enabled = true
+selection_enabled = true
