@@ -24,6 +24,8 @@ var _p2p_outgoing_buffer_size : int = 0
 var _has_js_buffer_transfer : bool = false
 var _eval_returns_byte_array : bool = false
 
+var _builds_origin : String = ""
+
 # Handle events broadcasted from JS to Godot
 # JS -> GD
 var _js_callback_receiver : JavaScriptObject
@@ -82,6 +84,7 @@ signal user_presence_updated(payload)
 signal got_is_entitled(payload)
 signal got_entitlements(payload)
 signal paywall_resolved(payload)
+signal content_downloaded(payload)
 
 func _log(msg: String) -> void:
 	if OS.is_debug_build():
@@ -94,6 +97,9 @@ func _enter_tree():
 	_log("_enter_tree() called, platform: %s" % OS.get_name())
 	_entered_tree = true
 	if _is_web:
+		var origin = JavaScriptBridge.eval("location.origin")
+		if origin is String:
+			_builds_origin = origin
 		WavedashJS = JavaScriptBridge.get_interface("WavedashJS")
 		if not WavedashJS:
 			push_error("WavedashSDK: WavedashJS not found on window")
@@ -818,6 +824,116 @@ func trigger_paywall(content_identifier: String):
 		var result = _web_unsupported("trigger_paywall")
 		paywall_resolved.emit(result)
 		return result
+
+func _validate_item_path(item_path: String, func_name: String) -> bool:
+	if item_path.is_empty():
+		push_error("[WavedashSDK] %s: item_path must not be empty" % func_name)
+		return false
+	if item_path.is_absolute_path():
+		push_error("[WavedashSDK] %s: item_path must be relative to your build root (e.g. 'dlc/full.pck'). Got: '%s'" % [func_name, item_path])
+		return false
+	for segment in item_path.split("/", false):
+		if segment == "..":
+			push_error("[WavedashSDK] %s: item_path must not contain '..' segments. Got: '%s'" % [func_name, item_path])
+			return false
+	return true
+
+func _content_url(item_path: String) -> String:
+	var segments = PackedStringArray()
+	for segment in item_path.split("/", false):
+		segments.append(segment.uri_encode())
+	return "%s/%s" % [_builds_origin, "/".join(segments)]
+
+func _content_error(message: String, code: int = 0, content_identifiers: Array = []) -> Dictionary:
+	return {"success": false, "data": null, "message": message, "code": code, "content_identifiers": content_identifiers}
+
+func _fetch_content(item_path: String, local_path: String):
+	if not _is_web:
+		var unsupported = _web_unsupported("download_content")
+		unsupported["code"] = 0
+		unsupported["content_identifiers"] = []
+		return unsupported
+
+	if not _validate_item_path(item_path, "download_content"):
+		return _content_error("Invalid item_path: must be relative to your build root, e.g. 'dlc/full.pck'")
+
+	if _builds_origin.is_empty():
+		return _content_error("Could not determine the origin this build is served from")
+
+	var dest_path = local_path
+	if dest_path.is_empty():
+		dest_path = "user://" + item_path
+
+	var url = _content_url(item_path)
+	_log("download_content: fetching %s" % url)
+
+	var http = HTTPRequest.new()
+	add_child(http)
+	var error = http.request(url)
+	if error != OK:
+		http.queue_free()
+		return _content_error("Failed to start request for '%s' (%s)" % [item_path, error_string(error)])
+
+	var response = await http.request_completed
+	http.queue_free()
+	var result: int = response[0]
+	var response_code: int = response[1]
+	var body: PackedByteArray = response[3]
+
+	if result != HTTPRequest.RESULT_SUCCESS:
+		return _content_error("Network error fetching '%s' (result %d)" % [item_path, result])
+
+	if response_code == Constants.RESULT_FORBIDDEN:
+		var identifiers: Array = []
+		var parsed = JSON.parse_string(body.get_string_from_utf8())
+		if parsed is Dictionary:
+			identifiers = parsed.get("contentIdentifiers", [])
+		var names = PackedStringArray()
+		for identifier in identifiers:
+			names.append(str(identifier))
+		var message = "'%s' is locked" % item_path
+		if not names.is_empty():
+			message = "'%s' is locked, player does not own: %s" % [item_path, ", ".join(names)]
+		return _content_error(message, response_code, identifiers)
+
+	if response_code != Constants.RESULT_OK:
+		return _content_error("Failed to fetch '%s' (HTTP %d)" % [item_path, response_code], response_code)
+
+	var dir_path = dest_path.get_base_dir()
+	if not dir_path.is_empty() and not DirAccess.dir_exists_absolute(dir_path):
+		var dir_error = DirAccess.make_dir_recursive_absolute(dir_path)
+		if dir_error != OK:
+			return _content_error("Failed to create directory '%s' (%s)" % [dir_path, error_string(dir_error)], response_code)
+
+	var file = FileAccess.open(dest_path, FileAccess.WRITE)
+	if file == null:
+		return _content_error("Failed to open '%s' for writing (%s)" % [dest_path, error_string(FileAccess.get_open_error())], response_code)
+	file.store_buffer(body)
+	file.close()
+
+	_log("download_content: saved %d bytes to %s" % [body.size(), dest_path])
+	# gdlint: ignore=max-returns
+	return {"success": true, "data": dest_path, "message": "", "code": response_code, "content_identifiers": []}
+
+## Downloads a file that shipped with your game build but isn't loaded yet, saving
+## it under user://. Use this for content you deliberately kept out of the initial
+## load - extra levels, high resolution assets, paid content.
+## `item_path` is relative to your build root (e.g. "dlc/full.pck"). `local_path`
+## overrides the default destination of "user://" + item_path.
+## The request is authenticated for you; the server re-checks ownership before it
+## serves paid bytes, so this is the real gate rather than is_entitled().
+## Response shape: { success, data: <local path>, message, code, content_identifiers }.
+## `code` is the HTTP status, or 0 if the request never completed. On 403 the file
+## is behind a paywall and `content_identifiers` lists what the player must own -
+## pass one to trigger_paywall().
+## To mount a downloaded .pck, hand the returned path to Godot:
+##     var result = await WavedashSDK.download_content("dlc/full.pck")
+##     if result.success:
+##         ProjectSettings.load_resource_pack(result.data)
+func download_content(item_path: String, local_path: String = ""):
+	var result = await _fetch_content(item_path, local_path)
+	content_downloaded.emit(result)
+	return result
 
 # P2P messaging
 # Send a P2P message from Godot. JS will only send the message if the peer is ready to receive
