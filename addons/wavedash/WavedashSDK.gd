@@ -350,14 +350,14 @@ func get_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, fr
 
 ## Posts a score to a leaderboard.
 ## Pass ugc_id to attach a UGC item (e.g. a replay) to the entry, or "" for none.
-## metadata attaches small key/value data to the entry — String, int and float values
-## only (e.g. {"character": "knight", "deaths": 3}).
+## metadata attaches small key/value data to the entry — String, int, float and bool
+## values only (e.g. {"character": "knight", "deaths": 3, "no_hit": true}).
 ## Store larger payloads as UGC and attach them via ugc_id instead.
 ## Metadata belongs to the score it was submitted with: a score that gets written
 ## replaces it, and an empty dictionary clears it. A score that keep_best rejects leaves
 ## the existing entry — metadata included — untouched.
-## Response shape: { success, data: { entry, submission, totalEntries }, message },
-## where entry carries the persisted metadata back.
+## Response shape: { success, data: <entry>, message }, where data.metadata carries
+## the persisted metadata back.
 func post_leaderboard_score(leaderboard_id: String, score: int, keep_best: bool, ugc_id: String = "", metadata: Dictionary = {}):
 	if _is_web and WavedashJS:
 		# The JS SDK parses the metadata JSON string, and reads null as an omitted argument.
@@ -556,7 +556,7 @@ func get_lobby_host_id(lobby_id: String) -> String:
 func get_lobby_data_string(lobby_id: String, key: String) -> String:
 	if _is_web and WavedashJS:
 		var result = WavedashJS.getLobbyData(lobby_id, key)
-		return result if result != null else ""
+		return str(result) if result != null else ""
 	return ""
 
 func get_lobby_data_int(lobby_id: String, key: String) -> int:
@@ -571,6 +571,17 @@ func get_lobby_data_float(lobby_id: String, key: String) -> float:
 		return float(result) if result != null else 0.0
 	return 0.0
 
+func get_lobby_data_bool(lobby_id: String, key: String) -> bool:
+	if _is_web and WavedashJS:
+		var result = WavedashJS.getLobbyData(lobby_id, key)
+		if result == null:
+			return false
+		# bool() has no String constructor: it errors at runtime on a String value.
+		if typeof(result) == TYPE_STRING:
+			return result != "" and result.to_lower() != "false"
+		return true if result else false
+	return false
+
 func set_lobby_data_string(lobby_id: String, key: String, value: String) -> bool:
 	if _is_web and WavedashJS:
 		return WavedashJS.setLobbyData(lobby_id, key, value)
@@ -582,6 +593,11 @@ func set_lobby_data_int(lobby_id: String, key: String, value: int) -> bool:
 	return false
 
 func set_lobby_data_float(lobby_id: String, key: String, value: float) -> bool:
+	if _is_web and WavedashJS:
+		return WavedashJS.setLobbyData(lobby_id, key, value)
+	return false
+
+func set_lobby_data_bool(lobby_id: String, key: String, value: bool) -> bool:
 	if _is_web and WavedashJS:
 		return WavedashJS.setLobbyData(lobby_id, key, value)
 	return false
