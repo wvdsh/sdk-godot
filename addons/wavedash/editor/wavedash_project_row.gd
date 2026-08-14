@@ -11,7 +11,6 @@ const WavedashProjectApi = preload("wavedash_project_api.gd")
 const WavedashDialogs = preload("wavedash_dialogs.gd")
 const WavedashInitWindowScene = preload("wavedash_init_window.tscn")
 const WavedashIconTheme = preload("wavedash_icon_theme.gd")
-const ChangeGameIcon = preload("assets/wrench_white.svg")
 const WavedashCompat = preload("wavedash_compat.gd")
 
 signal log_line(text: String)
@@ -29,7 +28,6 @@ func _ready() -> void:
 	if _in_edited_scene:
 		return
 	_action_button.pressed.connect(_on_action_pressed)
-	_action_button.icon = ChangeGameIcon
 	WavedashIconTheme.apply_to_button(_action_button)
 	refresh()
 

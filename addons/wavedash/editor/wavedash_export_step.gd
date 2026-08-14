@@ -39,7 +39,6 @@ func _spawn() -> WavedashOSProcess:
 		WavedashLog.error(gate)
 		return null
 	_sync_upload_dir()
-	_ensure_export_dir()
 	var process := WavedashOSProcess.new()
 	add_child(process)
 	if not process.start(OS.get_executable_path(), _args()):
@@ -48,24 +47,6 @@ func _spawn() -> WavedashOSProcess:
 		process.queue_free()
 		return null
 	return process
-
-## Godot's exporter refuses a missing target folder rather than creating one, and the first
-## export after a fresh preset always has one.
-func _ensure_export_dir() -> void:
-	var target := WavedashExportPresets.get_active_preset_export_path().trim_prefix("res://").get_base_dir()
-	if target == "":
-		return
-	if not target.is_absolute_path():
-		target = ProjectSettings.globalize_path("res://").path_join(target)
-	if DirAccess.dir_exists_absolute(target):
-		return
-	var err := DirAccess.make_dir_recursive_absolute(target)
-	if err != OK:
-		var failure := "Couldn't create the export folder \"%s\" (%s)." % [target, error_string(err)]
-		output_line.emit(failure)
-		WavedashLog.error(failure)
-		return
-	output_line.emit("Created export folder \"%s\"." % target)
 
 ## upload_dir is derived from the preset, so a mismatch is a stale value rather than
 ## a preference to respect. Both commands read it -- `build push` uploads it and

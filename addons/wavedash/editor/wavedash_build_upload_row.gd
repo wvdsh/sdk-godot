@@ -9,7 +9,6 @@ const WavedashGate = preload("wavedash_gate.gd")
 const WavedashBuildUploadWindowScene = preload("wavedash_build_upload_window.tscn")
 const WavedashIconTheme = preload("wavedash_icon_theme.gd")
 const WavedashDialogs = preload("wavedash_dialogs.gd")
-const UploadIcon = preload("assets/cloud_upload_white.svg")
 const WavedashCompat = preload("wavedash_compat.gd")
 
 signal log_line(text: String)
@@ -24,7 +23,6 @@ func _ready() -> void:
 	if _in_edited_scene:
 		return
 	_action_button.pressed.connect(_on_action_pressed)
-	_action_button.icon = UploadIcon
 	WavedashIconTheme.apply_to_button(_action_button)
 	_apply_status_color()
 	refresh()

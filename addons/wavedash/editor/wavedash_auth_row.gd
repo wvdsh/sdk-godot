@@ -10,7 +10,6 @@ const WavedashDialogs = preload("wavedash_dialogs.gd")
 const WavedashIconTheme = preload("wavedash_icon_theme.gd")
 const RecheckIcon = preload("assets/refresh_cw_white.svg")
 const SignInIcon = preload("assets/user_round_key_white.svg")
-const LogOutIcon = preload("assets/log_out_white.svg")
 const WavedashCompat = preload("wavedash_compat.gd")
 
 signal log_line(text: String)
@@ -62,7 +61,6 @@ func _refresh_status() -> void:
 func _apply_icons() -> void:
 	_action_button.icon = RecheckIcon if _authenticated else SignInIcon
 	WavedashIconTheme.apply_to_button(_action_button)
-	_logout_button.icon = LogOutIcon
 	WavedashIconTheme.apply_to_button(_logout_button)
 
 func _notification(what: int) -> void:

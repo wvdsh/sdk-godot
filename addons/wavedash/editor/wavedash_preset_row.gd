@@ -9,8 +9,11 @@ const WavedashExportPresets = preload("wavedash_export_presets.gd")
 const WavedashDialogs = preload("wavedash_dialogs.gd")
 const WavedashIconTheme = preload("wavedash_icon_theme.gd")
 const PresetIcon = preload("assets/package_white.svg")
-const CreatePresetIcon = preload("assets/package_plus_white.svg")
 const WavedashCompat = preload("wavedash_compat.gd")
+
+## Long enough to cover EditorExport's own 0.8s save timer.
+const EXPORT_PRESETS_SAVE_DELAY := 1.0
+const ROOT_EXPORT_PATH_REJECTED := "\"%s\" would export to the project root. Choose or create a folder for the build -- Wavedash uploads whichever folder the export lands in."
 
 signal log_line(text: String)
 signal status_changed
@@ -28,7 +31,6 @@ func _ready() -> void:
 	_dropdown.item_selected.connect(_on_preset_selected)
 	_create_button.pressed.connect(_on_create_default_pressed)
 	visibility_changed.connect(_refresh)
-	_create_button.icon = CreatePresetIcon
 	WavedashIconTheme.apply_to_button(_create_button)
 	_refresh()
 	_connect_export_dialog_refresh()
@@ -47,7 +49,16 @@ func _connect_export_dialog_refresh() -> void:
 	for child in WavedashCompat.editor_base_control().get_children():
 		if child.get_class() == "ProjectExportDialog":
 			child.visibility_changed.connect(_refresh)
+			child.visibility_changed.connect(_refresh_once_saved)
 			return
+
+## Godot debounces its export_presets.cfg write, so the refresh on close can land
+## before the file is rewritten.
+func _refresh_once_saved() -> void:
+	var before := FileAccess.get_md5(WavedashExportPresets.EXPORT_PRESETS_PATH)
+	await get_tree().create_timer(EXPORT_PRESETS_SAVE_DELAY).timeout
+	if is_inside_tree() and FileAccess.get_md5(WavedashExportPresets.EXPORT_PRESETS_PATH) != before:
+		_refresh()
 
 func _refresh() -> void:
 	var names := WavedashExportPresets.get_available_presets()
@@ -68,18 +79,48 @@ func _on_preset_selected(index: int) -> void:
 	WavedashExportPresets.set_active_preset(_dropdown.get_item_text(index))
 	status_changed.emit()
 
+## Matches how Project > Export builds its own Export Path picker.
+func _on_create_default_pressed() -> void:
+	var root_dir := ProjectSettings.globalize_path("res://")
+	var suggested := WavedashExportPresets.globalize_export_path(WavedashExportPresets.suggested_export_path())
+	var start_dir := suggested.get_base_dir()
+	if not DirAccess.dir_exists_absolute(start_dir):
+		start_dir = root_dir
+
+	var dialog := EditorFileDialog.new()
+	dialog.title = "Choose Wavedash Export Path"
+	dialog.file_mode = EditorFileDialog.FILE_MODE_SAVE_FILE
+	dialog.access = EditorFileDialog.ACCESS_FILESYSTEM
+	dialog.add_filter("*.%s" % WavedashExportPresets.WEB_EXTENSION, "Web Export")
+	dialog.ok_button_text = "Select"
+	dialog.current_dir = start_dir
+	dialog.current_file = suggested.get_file()
+	dialog.file_selected.connect(_confirm_create)
+	WavedashDialogs.show_file_dialog(dialog)
+
 ## Creates and reloads in one step, with no deferrable gap: Godot only reads
 ## export_presets.cfg at project open, and opening Project > Export while its
 ## in-memory list is stale makes it overwrite the file, deleting the new preset.
 ## A full reload is also the only way to register a preset from scripting.
-func _on_create_default_pressed() -> void:
+func _confirm_create(global_path: String) -> void:
+	var export_path := WavedashExportPresets.localize_export_path(global_path)
+	if export_path.get_base_dir() == "":
+		_reject_root_export_path(export_path)
+		return
 	var dialog := ConfirmationDialog.new()
 	dialog.title = "Create Wavedash Export?"
-	dialog.dialog_text = "Creates a Wavedash export preset and reloads the project so Godot picks it up. Unsaved changes will be saved first."
+	dialog.dialog_text = "Creates a Wavedash export preset that exports to \"%s\", and reloads the project so Godot picks it up. Unsaved changes will be saved first." % export_path
 	dialog.get_ok_button().text = "Create and Reload"
 	dialog.confirmed.connect(func() -> void:
-		var preset_name := WavedashExportPresets.create_default_web_preset()
-		log_line.emit("Created default Web export preset '%s' -- reloading project..." % preset_name)
+		var preset_name := WavedashExportPresets.create_default_web_preset(export_path)
+		log_line.emit("Created Web export preset '%s' exporting to \"%s\" -- reloading project..." % [preset_name, export_path])
 		WavedashCompat.restart_editor(true)
 	)
+	WavedashDialogs.show_dialog(dialog)
+
+## WavedashGate refuses this too, but only after the reload this flow would have spent.
+func _reject_root_export_path(export_path: String) -> void:
+	var dialog := AcceptDialog.new()
+	dialog.title = "Choose a Build Folder"
+	dialog.dialog_text = ROOT_EXPORT_PATH_REJECTED % export_path
 	WavedashDialogs.show_dialog(dialog)

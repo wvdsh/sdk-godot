@@ -13,7 +13,6 @@ const WavedashProjectApi = preload("wavedash_project_api.gd")
 const WavedashStepSequence = preload("wavedash_step_sequence.gd")
 const WavedashBuildPushStep = preload("wavedash_build_push_step.gd")
 const WavedashIconTheme = preload("wavedash_icon_theme.gd")
-const UploadIcon = preload("assets/cloud_upload_white.svg")
 const WavedashCompat = preload("wavedash_compat.gd")
 
 signal log_line(text: String)
@@ -47,7 +46,6 @@ func _ready() -> void:
 	get_ok_button().text = "Done"
 	get_ok_button().visible = false
 	_push_button.pressed.connect(_on_push_pressed)
-	_push_button.icon = UploadIcon
 	WavedashIconTheme.apply_to_button(_push_button)
 	_play_button.pressed.connect(_on_play_pressed)
 	_manage_builds_button.pressed.connect(_on_manage_builds_pressed)
