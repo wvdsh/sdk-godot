@@ -1,0 +1,79 @@
+[gd_scene format=3 uid="uid://cs84uv1kwmj0u"]
+
+[ext_resource type="Script" path="res://addons/wavedash/editor/wavedash_init_window.gd" id="1"]
+
+[node name="WavedashInitWindow" type="AcceptDialog" unique_id=368225856]
+title = "Connect to a Wavedash Game"
+size = Vector2i(450, 100)
+min_size = Vector2i(450, 0)
+script = ExtResource("1")
+
+[node name="Content" type="VBoxContainer" parent="." unique_id=1489200389]
+theme_override_constants/separation = 8
+
+[node name="GateMessage" type="Label" parent="Content" unique_id=984977397]
+custom_minimum_size = Vector2(350, 0)
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="TeamRow" type="HBoxContainer" parent="Content" unique_id=1477728185]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Label" type="Label" parent="Content/TeamRow" unique_id=1300438866]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Team:"
+clip_text = true
+
+[node name="Dropdown" type="OptionButton" parent="Content/TeamRow" unique_id=1968119393]
+layout_mode = 2
+size_flags_horizontal = 3
+clip_text = true
+
+[node name="TeamCreateRow" type="HBoxContainer" parent="Content" unique_id=1781086238]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="NameEdit" type="LineEdit" parent="Content/TeamCreateRow" unique_id=1465594416]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "New team name..."
+
+[node name="CreateButton" type="Button" parent="Content/TeamCreateRow" unique_id=725439951]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Create"
+clip_text = true
+
+[node name="GameRow" type="HBoxContainer" parent="Content" unique_id=1637910536]
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="Label" type="Label" parent="Content/GameRow" unique_id=101015470]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Game:"
+clip_text = true
+
+[node name="Dropdown" type="OptionButton" parent="Content/GameRow" unique_id=350076914]
+layout_mode = 2
+size_flags_horizontal = 3
+clip_text = true
+
+[node name="GameCreateRow" type="HBoxContainer" parent="Content" unique_id=323675944]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="NameEdit" type="LineEdit" parent="Content/GameCreateRow" unique_id=1042543577]
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "New game title..."
+
+[node name="CreateButton" type="Button" parent="Content/GameCreateRow" unique_id=403703129]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Create"
+clip_text = true
