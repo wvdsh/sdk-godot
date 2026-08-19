@@ -84,6 +84,7 @@ signal user_presence_updated(payload)
 signal got_is_entitled(payload)
 signal got_entitlements(payload)
 signal paywall_resolved(payload)
+signal entitlements_granted(payload)
 signal content_downloaded(payload)
 
 func _log(msg: String) -> void:
@@ -1177,6 +1178,10 @@ func _dispatch_js_event(args):
 			var data = JSON.parse_string(payload)
 			_log("Mute changed: %s" % str(payload))
 			mute_changed.emit(data)
+		Constants.JS_EVENT_ENTITLEMENTS_GRANTED:
+			var data = JSON.parse_string(payload)
+			_log("Purchase completed: %s" % str(payload))
+			entitlements_granted.emit(data)
 		_:
 			push_warning("[WavedashSDK] Received unknown event from JS: " + method_name)
 
