@@ -695,9 +695,17 @@ export function emit(ir) {
     for (const { f, t } of mapped) {
       const key = f.name;
       const dst = `o.${toSnake(f.name)}`;
-      if (t.elementModel || t.elementEnum) {
+      if (t.gd.startsWith("Array")) {
+        // Not a plain assignment: JSON hands back an untyped Array, and Godot rejects
+        // that against a typed one. Same element guard as from_data().
+        const guard = elementGuard(t);
         p(`\t\tfor item in d.get(${JSON.stringify(key)}, []):`);
-        p(`\t\t\t${dst}.append(${elementExpr(t)})`);
+        if (guard) {
+          p(`\t\t\tif ${guard}:`);
+          p(`\t\t\t\t${dst}.append(${elementExpr(t)})`);
+        } else {
+          p(`\t\t\t${dst}.append(${elementExpr(t)})`);
+        }
       } else if (t.enumRef) {
         p(`\t\t${dst} = ${t.enumRef.decode}(d.get(${JSON.stringify(key)}, ${t.enumRef.missing}))`);
       } else if (t.model) {

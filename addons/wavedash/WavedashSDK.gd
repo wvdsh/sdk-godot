@@ -30,6 +30,11 @@ signal backend_disconnected(payload: WavedashTypes.BackendConnectionPayload)
 signal fullscreen_changed(payload: WavedashTypes.FullscreenChangedPayload)
 signal mute_changed(payload: WavedashTypes.MuteChangedPayload)
 
+## Content the player was granted outside the game. `content_identifiers` is the newly
+## granted set, not the full one, and the JWT is refreshed first, so fetch_entitlement()
+## already answers true for each.
+signal entitlements_granted(payload: WavedashTypes.EntitlementsGrantedPayload)
+
 ## `texture` is null if the fetch failed. Answers a call you made, but stays out
 ## of the deprecated group below: it has never carried an envelope.
 signal user_avatar_loaded(texture: Texture2D, user_id: String)
@@ -1815,6 +1820,9 @@ func _dispatch_js_event(args) -> void:
 		WavedashTypes.JS_EVENT_FULLSCREEN_CHANGED:
 			_log("Fullscreen changed: %s" % str(payload))
 			fullscreen_changed.emit(WavedashTypes.FullscreenChangedPayload.from_dict(data))
+		WavedashTypes.JS_EVENT_ENTITLEMENTS_GRANTED:
+			_log("Entitlements granted: %s" % str(payload))
+			entitlements_granted.emit(WavedashTypes.EntitlementsGrantedPayload.from_dict(data))
 		WavedashTypes.JS_EVENT_MUTE_CHANGED:
 			_log("Mute changed: %s" % str(payload))
 			mute_changed.emit(WavedashTypes.MuteChangedPayload.from_dict(data))

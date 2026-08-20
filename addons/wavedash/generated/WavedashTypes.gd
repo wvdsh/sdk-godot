@@ -395,7 +395,8 @@ class LobbyJoinedPayload extends RefCounted:
 		o.lobby_id = d.get("lobbyId", "")
 		o.host_id = d.get("hostId", "")
 		for item in d.get("users", []):
-			o.users.append(LobbyUser.from_dict(item))
+			if item is Dictionary:
+				o.users.append(LobbyUser.from_dict(item))
 		o.metadata = d.get("metadata", {})
 		return o
 
@@ -668,6 +669,26 @@ class MuteChangedPayload extends RefCounted:
 		d["isMuted"] = is_muted
 		return d
 
+## Payload for EntitlementsGranted event - emitted when the player is granted
+## paid content, regardless of source (in-game paywall, game page purchase,
+## gift redemption, purchase from another tab). A list so one checkout can
+## grant multiple contents (bundles). The gameplay JWT is refreshed before
+## this event fires, so `isEntitled()` is already true for every entry.
+class EntitlementsGrantedPayload extends RefCounted:
+	var content_identifiers: Array[String] = []  # string[]
+
+	static func from_dict(d: Dictionary) -> EntitlementsGrantedPayload:
+		var o := EntitlementsGrantedPayload.new()
+		for item in d.get("contentIdentifiers", []):
+			if item is String:
+				o.content_identifiers.append(item)
+		return o
+
+	func to_dict() -> Dictionary:
+		var d := {}
+		d["contentIdentifiers"] = content_identifiers
+		return d
+
 ## P2PPeer
 class P2PPeer extends RefCounted:
 	var user_id: String = ""  # GenericId<"users">
@@ -848,7 +869,8 @@ class PaginatedUGCItems extends RefCounted:
 		o.continue_cursor = d.get("continueCursor", "")
 		o.is_done = d.get("isDone", false)
 		for item in d.get("page", []):
-			o.page.append(UGCItem.from_dict(item))
+			if item is Dictionary:
+				o.page.append(UGCItem.from_dict(item))
 		return o
 
 	func to_dict() -> Dictionary:
@@ -956,7 +978,8 @@ class LobbyJoinResponse extends RefCounted:
 		o.lobby_id = d.get("lobbyId", "")
 		o.metadata = d.get("metadata", {})
 		for item in d.get("users", []):
-			o.users.append(LobbyUser.from_dict(item))
+			if item is Dictionary:
+				o.users.append(LobbyUser.from_dict(item))
 		return o
 
 	func to_dict() -> Dictionary:
@@ -1195,6 +1218,7 @@ const JS_EVENT_BACKEND_DISCONNECTED = "BackendDisconnected"
 const JS_EVENT_BACKEND_RECONNECTING = "BackendReconnecting"
 const JS_EVENT_FULLSCREEN_CHANGED = "FullscreenChanged"
 const JS_EVENT_MUTE_CHANGED = "MuteChanged"
+const JS_EVENT_ENTITLEMENTS_GRANTED = "EntitlementsGranted"
 
 ## Turn a raw event payload Dictionary into its typed model.
 ## Call this from WavedashSDK._dispatch_js_event before emitting the signal.
@@ -1217,6 +1241,7 @@ static func parse_event(event_name: String, payload: Dictionary) -> RefCounted:
 		JS_EVENT_BACKEND_RECONNECTING: return BackendConnectionPayload.from_dict(payload)
 		JS_EVENT_FULLSCREEN_CHANGED: return FullscreenChangedPayload.from_dict(payload)
 		JS_EVENT_MUTE_CHANGED: return MuteChangedPayload.from_dict(payload)
+		JS_EVENT_ENTITLEMENTS_GRANTED: return EntitlementsGrantedPayload.from_dict(payload)
 		_: return null  # unmapped or dynamic (e.g. LobbyDataUpdated is free-form)
 
 # ---------------------------------------------------------------------------
