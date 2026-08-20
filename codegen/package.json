@@ -1,0 +1,14 @@
+{
+  "name": "wavedash-godot-codegen",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Generates typed GDScript models for the Wavedash Godot SDK from the sdk-js TypeScript declarations.",
+  "scripts": {
+    "generate": "npm install --no-audit --no-fund && node generate.mjs"
+  },
+  "devDependencies": {
+    "@wvdsh/sdk-js": "1.3.44",
+    "typescript": "^5.8.3"
+  }
+}

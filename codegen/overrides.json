@@ -1,0 +1,54 @@
+{
+  "$comment": [
+    "Hand-maintained decisions the TypeScript declarations cannot express.",
+    "",
+    "`number`: every field derived from a TS `number`, mapped to \"int\" or \"float\".",
+    "TS has one numeric type, neither .d.ts uses `bigint`, and no JSDoc tag encodes",
+    "the distinction, so nothing in the input carries the answer.",
+    "",
+    "Exhaustive both ways: a `number` field with no entry fails the run, and so does",
+    "an entry matching no emitted field -- neither a field added upstream nor a",
+    "rename can slip through unclassified.",
+    "",
+    "Keys are \"Model.field\": the FINAL emitted model name with the ORIGINAL camelCase",
+    "field name, singularized for array aliases -- `LeaderboardEntry.globalRank`, not",
+    "`LeaderboardEntries.globalRank`.",
+    "",
+    "\"int\" for counts, ranks, sizes, channels and millisecond timestamps; \"float\"",
+    "when the value can legitimately be fractional. When you cannot tell, choose",
+    "float: a wrong \"int\" truncates real data silently on the Variant->int assignment",
+    "in from_dict() (a 92.47s lap time becomes 92), while a wrong \"float\" only reads",
+    "less nicely. That asymmetry is also why there are no name heuristics (*Count,",
+    "*Rank, max*) -- their false positives land on the unsafe side."
+  ],
+
+  "number": {
+    "P2PPacketDroppedPayload.channel": "int",
+    "P2PPacketDroppedPayload.droppedCount": "int",
+    "P2PPacketDroppedPayload.droppedTotal": "int",
+    "BackendConnectionPayload.connectionCount": "int",
+    "BackendConnectionPayload.connectionRetries": "int",
+    "RemoteFileMetadata.size": "int",
+    "RemoteFileMetadata.lastModified": "int",
+    "P2PMessage.channel": "int",
+    "P2PConfig.messageSize": "int",
+    "P2PConfig.maxIncomingMessages": "int",
+
+    "UGCItem.createdAt": "int",
+    "ListUGCItemsArgs.numItems": "int",
+    "LobbyMessage.timestamp": "int",
+    "Lobby.maxPlayers": "int",
+    "Lobby.playerCount": "int",
+    "LobbyInvite._creationTime": "int",
+    "Leaderboard.totalEntries": "int",
+    "LeaderboardEntry.globalRank": "int",
+    "LeaderboardEntry.timestamp": "int",
+    "UpsertedLeaderboardEntry.timestamp": "int",
+    "UpsertedLeaderboardEntry.globalRank": "int",
+    "UpsertedLeaderboardEntry.submittedRank": "int",
+
+    "LeaderboardEntry.score": "float",
+    "UpsertedLeaderboardEntry.score": "float",
+    "UpsertedLeaderboardEntry.submittedScore": "float"
+  }
+}
