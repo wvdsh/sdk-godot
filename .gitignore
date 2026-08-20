@@ -12,9 +12,20 @@
 .DS_Store
 Thumbs.db
 
+# Windows Mark-of-the-Web
+*:Zone.Identifier
+
 # Editor backup files
 *.tmp
 *~
 
 # Claude / Cursor
 .claude/
+
+# Godot export output
+export_presets.cfg
+*.pck
+*.wasm
+
+# Logs
+*.log
