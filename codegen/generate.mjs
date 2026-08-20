@@ -80,14 +80,22 @@ const external = ir.aliases.filter((a) => a.kind === "unresolved").map((a) => a.
 if (external.length) {
   const byName = new Map((ir.resolved ?? []).map((r) => [r.name, r]));
   const expanded = external.filter((n) => byName.get(n)?.fields.length);
-  const stillOpaque = external.filter((n) => !byName.get(n)?.fields.length);
+  const opaque = external.filter((n) => !byName.get(n)?.fields.length);
   console.log(
     `[codegen] Convex-derived types expanded by the checker: ${expanded.length}/${external.length}`
   );
-  if (stillOpaque.length) {
+  // Testing the emitted text rather than a skip-list keeps this self-correcting.
+  // Word-bounded because the wire string "LobbyDataUpdated" contains LobbyDataUpdate.
+  const reaches = (n) => new RegExp(`\\b${n}\\b`).test(types);
+  const inOutput = opaque.filter(reaches);
+  const unused = opaque.filter((n) => !reaches(n));
+  if (inOutput.length) {
     console.log(
-      `[codegen]   still Variant/Dictionary: ${stillOpaque.join(", ")}` +
+      `[codegen]   still Variant/Dictionary in the output: ${inOutput.join(", ")}` +
         `\n[codegen]   (is @wvdsh/api installed? without it these cannot resolve)`
     );
+  }
+  if (unused.length) {
+    console.log(`[codegen]   unresolved, but never reach the output: ${unused.join(", ")}`);
   }
 }
