@@ -581,9 +581,6 @@ func get_lobby_data_int(lobby_id: String, key: String) -> int:
 		var result = WavedashJS.getLobbyData(lobby_id, key)
 		if result == null:
 			return 0
-		# Number() answers NaN for anything unparseable, and Infinity has no int to
-		# truncate to. int() turns both into INT64_MIN, so catch them first — a
-		# value that can truncate still truncates.
 		var num: float = _js_cast.asNumber(result)
 		return int(num) if is_finite(num) else 0
 	return 0
@@ -591,13 +588,7 @@ func get_lobby_data_int(lobby_id: String, key: String) -> int:
 func get_lobby_data_float(lobby_id: String, key: String) -> float:
 	if _is_web and WavedashJS:
 		var result = WavedashJS.getLobbyData(lobby_id, key)
-		if result == null:
-			return 0.0
-		# NaN is Number() saying it could not convert at all, so report the same 0.0
-		# an unset key gives rather than leak it into the caller's arithmetic.
-		# Infinity did convert and a float holds it, so that passes through.
-		var num: float = _js_cast.asNumber(result)
-		return num if not is_nan(num) else 0.0
+		return _js_cast.asNumber(result) if result != null else 0.0
 	return 0.0
 
 func get_lobby_data_bool(lobby_id: String, key: String) -> bool:
