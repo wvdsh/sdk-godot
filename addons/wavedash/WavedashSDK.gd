@@ -4,6 +4,8 @@ extends Node
 
 const Constants = preload("WavedashConstants.gd")
 
+const MAX_EXACT_INTEGER := 1 << 53
+
 # We expect window.WavedashJS to be available on the page
 var WavedashJS : JavaScriptObject
 var _is_web : bool = OS.get_name() == Constants.PLATFORM_WEB
@@ -603,6 +605,9 @@ func set_lobby_data_string(lobby_id: String, key: String, value: String) -> bool
 	return false
 
 func set_lobby_data_int(lobby_id: String, key: String, value: int) -> bool:
+	if value > MAX_EXACT_INTEGER or value < -MAX_EXACT_INTEGER:
+		push_error("Lobby data holds numbers as a double, which is exact only to 2^53. Store %d as a String." % value)
+		return false
 	if _is_web and WavedashJS:
 		return WavedashJS.setLobbyData(lobby_id, key, value)
 	return false
