@@ -19,6 +19,8 @@ var _cached_lobby_id : String = ""
 var _p2p_outgoing_buffer : JavaScriptObject
 var _p2p_outgoing_buffer_size : int = 0
 
+var _js_cast : JavaScriptObject
+
 # Godot compatibility checks for which P2P method to use
 # Initialized at startup
 var _has_js_buffer_transfer : bool = false
@@ -94,6 +96,13 @@ func _log(msg: String) -> void:
 func _web_unsupported(method_name: String) -> Dictionary:
 	return {"success": false, "data": null, "message": "%s is only supported in Web builds" % method_name}
 
+func _install_js_cast() -> void:
+	JavaScriptBridge.eval("window.__wavedashCast = { asString: (v) => String(v), asNumber: (v) => Number(v), asBool: (v) => Boolean(v) };")
+	_js_cast = JavaScriptBridge.get_interface("__wavedashCast")
+	if not _js_cast:
+		push_error("WavedashSDK: could not install the JS value casting interface")
+		return
+
 func _enter_tree():
 	_log("_enter_tree() called, platform: %s" % OS.get_name())
 	_entered_tree = true
@@ -113,6 +122,7 @@ func _enter_tree():
 		_has_js_buffer_transfer = JavaScriptBridge.has_method("js_buffer_to_packed_byte_array")
 		if not _has_js_buffer_transfer:
 			_eval_returns_byte_array = JavaScriptBridge.eval("new Uint8Array([1,2,3])") is PackedByteArray
+		_install_js_cast()
 
 func init(config: Dictionary):
 	assert(_entered_tree, "WavedashSDK.init() called before WavedashSDK was added to the tree")
@@ -554,33 +564,37 @@ func get_lobby_host_id(lobby_id: String) -> String:
 		return result if result else ""
 	return ""
 
+func has_lobby_data(lobby_id: String, key: String) -> bool:
+	if _is_web and WavedashJS:
+		return WavedashJS.getLobbyData(lobby_id, key) != null
+	return false
+
 func get_lobby_data_string(lobby_id: String, key: String) -> String:
 	if _is_web and WavedashJS:
 		var result = WavedashJS.getLobbyData(lobby_id, key)
-		return str(result) if result != null else ""
+
+		return _js_cast.asString(result) if result != null else ""
 	return ""
 
 func get_lobby_data_int(lobby_id: String, key: String) -> int:
 	if _is_web and WavedashJS:
 		var result = WavedashJS.getLobbyData(lobby_id, key)
-		return int(result) if result != null else 0
+		if result == null:
+			return 0
+		var num: float = _js_cast.asNumber(result)
+		return int(num) if is_finite(num) else 0
 	return 0
 
 func get_lobby_data_float(lobby_id: String, key: String) -> float:
 	if _is_web and WavedashJS:
 		var result = WavedashJS.getLobbyData(lobby_id, key)
-		return float(result) if result != null else 0.0
+		return _js_cast.asNumber(result) if result != null else 0.0
 	return 0.0
 
 func get_lobby_data_bool(lobby_id: String, key: String) -> bool:
 	if _is_web and WavedashJS:
 		var result = WavedashJS.getLobbyData(lobby_id, key)
-		if result == null:
-			return false
-		# bool() has no String constructor: it errors at runtime on a String value.
-		if typeof(result) == TYPE_STRING:
-			return result != "" and result.to_lower() != "false"
-		return true if result else false
+		return _js_cast.asBool(result) if result != null else false
 	return false
 
 func set_lobby_data_string(lobby_id: String, key: String, value: String) -> bool:
