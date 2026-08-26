@@ -603,6 +603,9 @@ func set_lobby_data_string(lobby_id: String, key: String, value: String) -> bool
 	return false
 
 func set_lobby_data_int(lobby_id: String, key: String, value: int) -> bool:
+	if value > Constants.JS_MAX_INTEGER or value < -Constants.JS_MAX_INTEGER:
+		push_error("set_lobby_data_int: %d exceeds JS safe integer range (±2^53). Use set_lobby_data_string for larger values." % value)
+		return false
 	if _is_web and WavedashJS:
 		return WavedashJS.setLobbyData(lobby_id, key, value)
 	return false
