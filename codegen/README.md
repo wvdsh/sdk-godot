@@ -31,9 +31,10 @@ node generate.mjs [--input <index.d.ts>]  # generate from what is already instal
    `Dictionary`, anything unresolved → `Variant` with a note.
 
 5. **Emit** `addons/wavedash/generated/WavedashTypes.gd`, the one generated file that
-   ships with the addon: an inner class per model with a `from_dict()`, an enum per
-   literal union (with string converters for the ones read off the wire), a value box per
-   payload type that needs one, and `parse_event()`. `handwritten_types.gd` is appended.
+   ships with the addon: an inner class per model with a `from_dict()` (and a
+   `list_from_data()` on each model an async call returns a list of), an enum per literal
+   union (with string converters for the ones read off the wire), and `parse_event()`.
+   `handwritten_types.gd` is appended.
 
 6. **Check.** A `number` field with no `overrides.json` entry fails the run, and so does an
    entry matching no emitted field. Convex-derived aliases

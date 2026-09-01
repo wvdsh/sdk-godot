@@ -87,6 +87,11 @@ const Envelope = preload("WavedashEnvelope.gd")
 const LobbyCache = preload("WavedashLobbyCache.gd")
 const PendingRequests = preload("WavedashPendingRequests.gd")
 
+## Largest magnitude an int can have and still round-trip through a JS number without
+## losing precision. Lobby data holds numbers as a double, so a larger value must be
+## stored with set_lobby_data_string() instead.
+const JS_MAX_INTEGER := 1 << 53
+
 const _ENGINE_GODOT = "GODOT"
 
 const _FULLSCREEN_DECLINED = (
@@ -122,6 +127,7 @@ var _has_js_buffer_transfer : bool = false
 var _eval_returns_byte_array : bool = false
 
 var _js_callback_receiver : JavaScriptObject
+var _js_cast : JavaScriptObject
 
 var _pending := PendingRequests.new()
 var _reported_once: Dictionary = {}
@@ -159,6 +165,14 @@ func _enter_tree() -> void:
 		_has_js_buffer_transfer = JavaScriptBridge.has_method("js_buffer_to_packed_byte_array")
 		if not _has_js_buffer_transfer:
 			_eval_returns_byte_array = JavaScriptBridge.eval("new Uint8Array([1,2,3])") is PackedByteArray
+		_install_js_cast()
+
+func _install_js_cast() -> void:
+	JavaScriptBridge.eval("window.__wavedashCast = { asString: (v) => String(v), asNumber: (v) => Number(v), asBool: (v) => Boolean(v) };")
+	_js_cast = JavaScriptBridge.get_interface("__wavedashCast")
+	if not _js_cast:
+		push_error("WavedashSDK: could not install the JS value casting interface")
+		return
 
 #endregion
 
@@ -207,34 +221,6 @@ func _stamped_bad_id_error(id: String, func_name: String) -> bool:
 		return true
 	return false
 
-## A key that holds another type is a caller bug, so it says what is actually there
-## rather than answering a silent null.
-func _stamped_wrong_type(func_name: String, key: String, wanted: String, held) -> void:
-	_set_last_error(_fail_envelope(ERR_INVALID_DATA,
-		"%s: '%s' holds %s (%s), not %s" % [
-			func_name, key, str(held), type_string(typeof(held)), wanted]))
-
-## The sync bridge yields null when the page threw. None of the JS getters behind these
-## can legitimately answer null, so a null is a failed read rather than an absent value.
-func _stamped_no_answer(func_name: String) -> void:
-	_set_last_error(_fail_envelope(FAILED, "%s: the page did not answer" % func_name))
-
-## The page declares these bool, so anything else is a failed read rather than something
-## to coerce: bool("false") is true.
-func _bool_box(result: Variant, func_name: String) -> WavedashTypes.BoolOptional:
-	if result == null:
-		_stamped_no_answer(func_name)
-		return null
-	if not (result is bool):
-		_set_last_error(_fail_envelope(ERR_INVALID_DATA,
-			"%s: the page answered %s (%s), not a bool" % [
-				func_name, str(result), type_string(typeof(result))]))
-		return null
-	clear_last_error()
-	var box := WavedashTypes.BoolOptional.new()
-	box.bool_value = result
-	return box
-
 func _invalid_path_error(path: String, func_name: String) -> Envelope:
 	return _fail_envelope(ERR_FILE_BAD_PATH,
 		"%s: path must start with 'user://' or %s. Got: '%s'"
@@ -272,6 +258,12 @@ func _stamped_unavailable_error(func_name: String) -> bool:
 func _emit_response(env: Envelope, sig: Signal) -> void:
 	_set_last_error(env)
 	sig.emit(env.to_legacy_dict())
+
+func _string_data(env: Envelope) -> String:
+	return env.data if env.data is String else ""
+
+func _bool_data(env: Envelope) -> bool:
+	return env.data is bool and env.data
 
 ## The outcome of the most recently completed call: OK, or an @GlobalScope.Error.
 ##
@@ -368,11 +360,11 @@ func toggle_overlay() -> void:
 		clear_last_error()
 
 ## Mirrored from the Wavedash host page, which owns the real fullscreen target.
-## Null when the page could not answer.
-func try_get_fullscreen() -> WavedashTypes.BoolOptional:
-	if _stamped_unavailable_error("try_get_fullscreen"):
-		return null
-	return _bool_box(WavedashJS.isFullscreen(), "try_get_fullscreen")
+func is_fullscreen() -> bool:
+	if _is_web and WavedashJS:
+		var result: Variant = WavedashJS.isFullscreen()
+		return result is bool and result
+	return false
 
 ## Off-web, a rejected promise, and a host that would not apply the change are all
 ## failures: each stamps and answers false.
@@ -406,11 +398,11 @@ func request_fullscreen_toggle() -> bool:
 	return _host_change_applied(env, "request_fullscreen_toggle", _FULLSCREEN_DECLINED)
 
 ## Mirrored from the Wavedash host page, which owns the mute control.
-## Null when the page could not answer.
-func try_get_muted() -> WavedashTypes.BoolOptional:
-	if _stamped_unavailable_error("try_get_muted"):
-		return null
-	return _bool_box(WavedashJS.isMuted(), "try_get_muted")
+func is_muted() -> bool:
+	if _is_web and WavedashJS:
+		var result: Variant = WavedashJS.isMuted()
+		return result is bool and result
+	return false
 
 ## Ask the host to mute (true) or unmute (false).
 ## True when the change was applied; false means it was not, and the error slot says why —
@@ -490,8 +482,8 @@ func get_username(user_id: String = "") -> String:
 
 ## Returns the current user's gameplay JWT, fetching it if not already cached.
 ## Use this to authenticate requests to your game's own backend, if you have one.
-## `string_value` is the JWT string.
-func fetch_user_jwt() -> WavedashTypes.StringOptional:
+## "" when the fetch failed, and get_last_error() says why.
+func fetch_user_jwt() -> String:
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.getUserJwt())
@@ -499,8 +491,8 @@ func fetch_user_jwt() -> WavedashTypes.StringOptional:
 		env = _web_unsupported("fetch_user_jwt")
 	_emit_response(env, got_user_jwt)
 	if not env.ok():
-		return null
-	return WavedashTypes.StringOptional.from_data(env.data)
+		return ""
+	return _string_data(env)
 
 ## Returns the CDN URL for a cached user's avatar with size transformation.
 ## Users are cached when seen via friends list or lobby membership.
@@ -579,9 +571,9 @@ func fetch_user_avatar(user_id_to_fetch: String, size: int = WavedashTypes.AVATA
 	return texture
 
 ## Lists the current user's friends.
-## `friends` is an Array[WavedashTypes.Friend].
+## Empty when the call failed, and get_last_error() says why.
 ## Friends are automatically cached for avatar lookups via get_user_avatar_url/fetch_user_avatar.
-func list_friends() -> WavedashTypes.FriendListOptional:
+func list_friends() -> Array[WavedashTypes.Friend]:
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.listFriends())
@@ -589,8 +581,8 @@ func list_friends() -> WavedashTypes.FriendListOptional:
 		env = _web_unsupported("list_friends")
 	_emit_response(env, got_friends)
 	if not env.ok():
-		return null
-	return WavedashTypes.FriendListOptional.from_data(env.data)
+		return []
+	return WavedashTypes.Friend.list_from_data(env.data)
 
 #endregion
 
@@ -622,9 +614,9 @@ func fetch_or_create_leaderboard(
 		return null
 	return WavedashTypes.Leaderboard.from_dict(env.data)
 
-func list_my_leaderboard_entries(leaderboard_id: String) -> WavedashTypes.LeaderboardEntryListOptional:
+func list_my_leaderboard_entries(leaderboard_id: String) -> Array[WavedashTypes.LeaderboardEntry]:
 	if _stamped_bad_id_error(leaderboard_id, "list_my_leaderboard_entries"):
-		return null
+		return []
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.getMyLeaderboardEntries(leaderboard_id))
@@ -632,8 +624,8 @@ func list_my_leaderboard_entries(leaderboard_id: String) -> WavedashTypes.Leader
 		env = _web_unsupported("list_my_leaderboard_entries")
 	_emit_response(env, got_leaderboard_entries)
 	if not env.ok():
-		return null
-	return WavedashTypes.LeaderboardEntryListOptional.from_data(env.data)
+		return []
+	return WavedashTypes.LeaderboardEntry.list_from_data(env.data)
 
 ## -1 if an error occurred. Check `count < 0`, not truthiness: `0` is a leaderboard with
 ## no entries, which is a real answer.
@@ -646,9 +638,9 @@ func get_leaderboard_entry_count(leaderboard_id: String) -> int:
 	clear_last_error()
 	return int(result) if result != null else -1
 
-func list_leaderboard_entries_around_player(leaderboard_id: String, count_ahead: int, count_behind: int, friends_only: bool) -> WavedashTypes.LeaderboardEntryListOptional:
+func list_leaderboard_entries_around_player(leaderboard_id: String, count_ahead: int, count_behind: int, friends_only: bool) -> Array[WavedashTypes.LeaderboardEntry]:
 	if _stamped_bad_id_error(leaderboard_id, "list_leaderboard_entries_around_player"):
-		return null
+		return []
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.listLeaderboardEntriesAroundUser(leaderboard_id, count_ahead, count_behind, friends_only))
@@ -656,12 +648,12 @@ func list_leaderboard_entries_around_player(leaderboard_id: String, count_ahead:
 		env = _web_unsupported("list_leaderboard_entries_around_player")
 	_emit_response(env, got_leaderboard_entries)
 	if not env.ok():
-		return null
-	return WavedashTypes.LeaderboardEntryListOptional.from_data(env.data)
+		return []
+	return WavedashTypes.LeaderboardEntry.list_from_data(env.data)
 
-func list_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, friends_only: bool) -> WavedashTypes.LeaderboardEntryListOptional:
+func list_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, friends_only: bool) -> Array[WavedashTypes.LeaderboardEntry]:
 	if _stamped_bad_id_error(leaderboard_id, "list_leaderboard_entries"):
-		return null
+		return []
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.listLeaderboardEntries(leaderboard_id, offset, limit, friends_only))
@@ -669,8 +661,8 @@ func list_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, f
 		env = _web_unsupported("list_leaderboard_entries")
 	_emit_response(env, got_leaderboard_entries)
 	if not env.ok():
-		return null
-	return WavedashTypes.LeaderboardEntryListOptional.from_data(env.data)
+		return []
+	return WavedashTypes.LeaderboardEntry.list_from_data(env.data)
 
 ## Submit a score. Pass ugc_id to attach a UGC item (e.g. a replay), or "" for none;
 ## store anything large as UGC rather than in metadata, which takes String, int, float
@@ -723,7 +715,7 @@ func _validate_user_data_path(path: String) -> bool:
 		return false
 	return true
 
-func download_remote_directory(path: String) -> WavedashTypes.StringOptional:
+func download_remote_directory(path: String) -> String:
 	path = _normalize_user_path(path)
 	var env: Envelope
 	if is_available():
@@ -735,12 +727,12 @@ func download_remote_directory(path: String) -> WavedashTypes.StringOptional:
 		env = _web_unsupported("download_remote_directory")
 	_emit_response(env, remote_directory_downloaded)
 	if not env.ok():
-		return null
-	return WavedashTypes.StringOptional.from_data(env.data)
+		return ""
+	return _string_data(env)
 
-## Lists entries in a remote directory without downloading them. `remote_file_metadatas`
-## holds them. Path must be under user:// or OS.get_user_data_dir().
-func list_remote_directory(path: String) -> WavedashTypes.RemoteFileMetadataListOptional:
+## Lists entries in a remote directory without downloading them. Empty when the call
+## failed. Path must be under user:// or OS.get_user_data_dir().
+func list_remote_directory(path: String) -> Array[WavedashTypes.RemoteFileMetadata]:
 	path = _normalize_user_path(path)
 	var env: Envelope
 	if is_available():
@@ -752,10 +744,10 @@ func list_remote_directory(path: String) -> WavedashTypes.RemoteFileMetadataList
 		env = _web_unsupported("list_remote_directory")
 	_emit_response(env, got_remote_directory_listing)
 	if not env.ok():
-		return null
-	return WavedashTypes.RemoteFileMetadataListOptional.from_data(env.data)
+		return []
+	return WavedashTypes.RemoteFileMetadata.list_from_data(env.data)
 
-func download_remote_file(file_path: String) -> WavedashTypes.StringOptional:
+func download_remote_file(file_path: String) -> String:
 	file_path = _normalize_user_path(file_path)
 	var env: Envelope
 	if is_available():
@@ -767,17 +759,17 @@ func download_remote_file(file_path: String) -> WavedashTypes.StringOptional:
 		env = _web_unsupported("download_remote_file")
 	_emit_response(env, remote_file_downloaded)
 	if not env.ok():
-		return null
-	return WavedashTypes.StringOptional.from_data(env.data)
+		return ""
+	return _string_data(env)
 
 ## Does this file exist in remote storage? A HEAD request, so you can branch on whether a
 ## save is there without paying for the download. Not a required preflight —
 ## download_remote_file() answers null with "404 (Not Found)" on its own.
 ##
-## `bool_value` is true when it exists; false means it is not there. Only null is a failed
-## check, so read the field rather than testing the box — a box holding false is truthy.
+## True when it exists. False when it is not there, and also when the check itself failed,
+## so tell the two apart with get_last_error().
 ## Path must be under user:// or OS.get_user_data_dir().
-func check_remote_file(file_path: String) -> WavedashTypes.BoolOptional:
+func check_remote_file(file_path: String) -> bool:
 	file_path = _normalize_user_path(file_path)
 	var env: Envelope
 	if is_available():
@@ -789,10 +781,10 @@ func check_remote_file(file_path: String) -> WavedashTypes.BoolOptional:
 		env = _web_unsupported("check_remote_file")
 	_emit_response(env, got_remote_file_exists)
 	if not env.ok():
-		return null
-	return WavedashTypes.BoolOptional.from_data(env.data)
+		return false
+	return _bool_data(env)
 
-func upload_remote_file(file_path: String) -> WavedashTypes.StringOptional:
+func upload_remote_file(file_path: String) -> String:
 	file_path = _normalize_user_path(file_path)
 	var env: Envelope
 	if is_available():
@@ -804,13 +796,13 @@ func upload_remote_file(file_path: String) -> WavedashTypes.StringOptional:
 		env = _web_unsupported("upload_remote_file")
 	_emit_response(env, remote_file_uploaded)
 	if not env.ok():
-		return null
-	return WavedashTypes.StringOptional.from_data(env.data)
+		return ""
+	return _string_data(env)
 
 ## Deletes a remote file from cloud storage.
 ## Path must be under user:// or OS.get_user_data_dir().
-## `string_value` is the deleted file's path.
-func delete_remote_file(file_path: String) -> WavedashTypes.StringOptional:
+## Returns the deleted file's path, or "" when the call failed.
+func delete_remote_file(file_path: String) -> String:
 	file_path = _normalize_user_path(file_path)
 	var env: Envelope
 	if is_available():
@@ -822,17 +814,17 @@ func delete_remote_file(file_path: String) -> WavedashTypes.StringOptional:
 		env = _web_unsupported("delete_remote_file")
 	_emit_response(env, remote_file_deleted)
 	if not env.ok():
-		return null
-	return WavedashTypes.StringOptional.from_data(env.data)
+		return ""
+	return _string_data(env)
 
 #endregion
 
 #region Lobbies
 
-## Creates a lobby. `string_value` is the new lobby's id. Leave `max_players` at 0 to accept
+## Creates a lobby and returns its id, or "" when the call failed. Leave `max_players` at 0 to accept
 ## the platform default — it is then omitted rather than sent, since sdk-js counts
 ## only `undefined` as absent and rejects the JS null that GDScript null marshals to.
-func create_lobby(visibility: WavedashTypes.LobbyVisibility, max_players: int = 0) -> WavedashTypes.StringOptional:
+func create_lobby(visibility: WavedashTypes.LobbyVisibility, max_players: int = 0) -> String:
 	var env: Envelope
 	if is_available():
 		if max_players <= 0:
@@ -843,10 +835,10 @@ func create_lobby(visibility: WavedashTypes.LobbyVisibility, max_players: int = 
 		env = _web_unsupported("create_lobby")
 	_emit_response(env, lobby_created)
 	if not env.ok():
-		return null
-	var response := WavedashTypes.StringOptional.from_data(env.data)
-	_lobby.joined(response.string_value, _user_id)
-	return response
+		return ""
+	var lobby_id_out := _string_data(env)
+	_lobby.joined(lobby_id_out, _user_id)
+	return lobby_id_out
 
 ## False if the request was refused. A command, so there is no third answer to box: the
 ## page either took the request or it did not.
@@ -863,9 +855,9 @@ func join_lobby(lobby_id: String) -> bool:
 	_set_last_error(env)
 	return env.ok()
 
-func leave_lobby(lobby_id: String) -> WavedashTypes.StringOptional:
+func leave_lobby(lobby_id: String) -> String:
 	if _stamped_bad_id_error(lobby_id, "leave_lobby"):
-		return null
+		return ""
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.leaveLobby(lobby_id))
@@ -873,12 +865,12 @@ func leave_lobby(lobby_id: String) -> WavedashTypes.StringOptional:
 		env = _web_unsupported("leave_lobby")
 	_emit_response(env, lobby_left)
 	if not env.ok():
-		return null
-	var response := WavedashTypes.StringOptional.from_data(env.data)
-	_lobby.left(response.string_value)
-	return response
+		return ""
+	var lobby_id_out := _string_data(env)
+	_lobby.left(lobby_id_out)
+	return lobby_id_out
 
-func list_available_lobbies() -> WavedashTypes.LobbyListOptional:
+func list_available_lobbies() -> Array[WavedashTypes.Lobby]:
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.listAvailableLobbies())
@@ -886,8 +878,8 @@ func list_available_lobbies() -> WavedashTypes.LobbyListOptional:
 		env = _web_unsupported("list_available_lobbies")
 	_emit_response(env, got_lobbies)
 	if not env.ok():
-		return null
-	return WavedashTypes.LobbyListOptional.from_data(env.data)
+		return []
+	return WavedashTypes.Lobby.list_from_data(env.data)
 
 ## Fetches a lobby by ID, including its visibility, player count and metadata.
 ## Returns the lobby itself, so read it directly — there is no box to unwrap.
@@ -922,67 +914,38 @@ func get_lobby_host_id(lobby_id: String) -> String:
 		return ""
 	clear_last_error()
 	return host_id
-func try_get_lobby_data_string(lobby_id: String, key: String) -> WavedashTypes.StringOptional:
-	var result = _lobby_data_value(lobby_id, key, "try_get_lobby_data_string")
-	if result == null:
-		return null
-	if not (result is String):
-		_stamped_wrong_type("try_get_lobby_data_string", key, "String", result)
-		return null
-	var box := WavedashTypes.StringOptional.new()
-	box.string_value = result
-	return box
 
-## A fractional value answers null: an int cannot round-trip it.
-func try_get_lobby_data_int(lobby_id: String, key: String) -> WavedashTypes.IntOptional:
-	var result = _lobby_data_value(lobby_id, key, "try_get_lobby_data_int")
-	if result == null:
-		return null
-	# A JS number crosses the bridge as a float, so whole ones arrive as 12.0.
-	if not (result is int or (result is float and result == floor(result))):
-		_stamped_wrong_type("try_get_lobby_data_int", key, "int", result)
-		return null
-	var box := WavedashTypes.IntOptional.new()
-	box.int_value = int(result)
-	return box
+func has_lobby_data(lobby_id: String, key: String) -> bool:
+	if _is_web and WavedashJS:
+		return WavedashJS.getLobbyData(lobby_id, key) != null
+	return false
 
-func try_get_lobby_data_float(lobby_id: String, key: String) -> WavedashTypes.FloatOptional:
-	var result = _lobby_data_value(lobby_id, key, "try_get_lobby_data_float")
-	if result == null:
-		return null
-	if not (result is int or result is float):
-		_stamped_wrong_type("try_get_lobby_data_float", key, "float", result)
-		return null
-	var box := WavedashTypes.FloatOptional.new()
-	box.float_value = float(result)
-	return box
+func get_lobby_data_string(lobby_id: String, key: String) -> String:
+	if _is_web and WavedashJS:
+		var result: Variant = WavedashJS.getLobbyData(lobby_id, key)
+		return _js_cast.asString(result) if result != null else ""
+	return ""
 
-func try_get_lobby_data_bool(lobby_id: String, key: String) -> WavedashTypes.BoolOptional:
-	var result = _lobby_data_value(lobby_id, key, "try_get_lobby_data_bool")
-	if result == null:
-		return null
-	if not (result is bool):
-		_stamped_wrong_type("try_get_lobby_data_bool", key, "bool", result)
-		return null
-	var box := WavedashTypes.BoolOptional.new()
-	box.bool_value = result
-	return box
+func get_lobby_data_int(lobby_id: String, key: String) -> int:
+	if _is_web and WavedashJS:
+		var result: Variant = WavedashJS.getLobbyData(lobby_id, key)
+		if result == null:
+			return 0
+		var num: float = _js_cast.asNumber(result)
+		return int(num) if is_finite(num) else 0
+	return 0
 
-func _lobby_data_value(lobby_id: String, key: String, func_name: String) -> Variant:
-	if _stamped_bad_id_error(lobby_id, func_name):
-		return null
-	if _stamped_unavailable_error(func_name):
-		return null
-	var raw = _read_lobby_data(lobby_id, key)
-	if raw == null:
-		_set_last_error(_fail_envelope(ERR_DOES_NOT_EXIST,
-			"%s: lobby '%s' has no '%s' in its metadata" % [func_name, lobby_id, key]))
-		return null
-	clear_last_error()
-	return raw
+func get_lobby_data_float(lobby_id: String, key: String) -> float:
+	if _is_web and WavedashJS:
+		var result: Variant = WavedashJS.getLobbyData(lobby_id, key)
+		return _js_cast.asNumber(result) if result != null else 0.0
+	return 0.0
 
-func _read_lobby_data(lobby_id: String, key: String) -> Variant:
-	return WavedashJS.getLobbyData(lobby_id, key)
+func get_lobby_data_bool(lobby_id: String, key: String) -> bool:
+	if _is_web and WavedashJS:
+		var result: Variant = WavedashJS.getLobbyData(lobby_id, key)
+		return _js_cast.asBool(result) if result != null else false
+	return false
 
 ## A false from the page is a refused write, so it stamps — the same as every other
 ## command, including the host-page change requests.
@@ -1005,6 +968,11 @@ func set_lobby_data_string(lobby_id: String, key: String, value: String) -> bool
 
 func set_lobby_data_int(lobby_id: String, key: String, value: int) -> bool:
 	if _stamped_bad_id_error(lobby_id, "set_lobby_data_int"):
+		return false
+	if value > JS_MAX_INTEGER or value < -JS_MAX_INTEGER:
+		_set_last_error(_fail_envelope(ERR_INVALID_PARAMETER,
+			("set_lobby_data_int: %d exceeds JS safe integer range (±2^53). "
+				+ "Use set_lobby_data_string for larger values.") % value))
 		return false
 	if _stamped_unavailable_error("set_lobby_data_int"):
 		return false
@@ -1034,27 +1002,15 @@ func clear_lobby_data(lobby_id: String, key: String) -> bool:
 		return false
 	return _lobby_write_applied(WavedashJS.deleteLobbyData(lobby_id, key),
 		"clear_lobby_data", lobby_id)
-## Null when the list could not be read; an empty list means an empty lobby.
-func try_get_lobby_users(lobby_id: String) -> WavedashTypes.LobbyUserListOptional:
-	if _stamped_bad_id_error(lobby_id, "try_get_lobby_users"):
-		return null
-	if _stamped_unavailable_error("try_get_lobby_users"):
-		return null
-	# Untyped: a null return would fail a typed assignment before the is-Array
-	# check below.
-	var result = WavedashJS.getLobbyUsers(lobby_id)
-	_log("Got lobby users: %s" % str(result))
-	var parsed = JSON.parse_string(result) if result else []
-	if not (parsed is Array):
-		_set_last_error(_fail_envelope(FAILED,
-			"try_get_lobby_users: the page did not return a JSON array"))
-		return null
-	clear_last_error()
-	var box := WavedashTypes.LobbyUserListOptional.new()
-	for item in parsed:
-		if item is Dictionary:
-			box.lobby_users.append(WavedashTypes.LobbyUser.from_dict(item))
-	return box
+## Empty unless you are a member of the lobby: the page only lists users for the lobby
+## you are in.
+func get_lobby_users(lobby_id: String) -> Array[WavedashTypes.LobbyUser]:
+	if _is_web and WavedashJS:
+		var result: Variant = WavedashJS.getLobbyUsers(lobby_id)
+		_log("Got lobby users: %s" % str(result))
+		var parsed: Variant = JSON.parse_string(result) if result is String else null
+		return WavedashTypes.LobbyUser.list_from_data(parsed)
+	return []
 
 ## -1 when the count could not be read, the same sentinel as
 ## get_leaderboard_entry_count(). A real count is never negative, so check `count < 0`
@@ -1105,8 +1061,8 @@ func invite_user_to_lobby(lobby_id: String, user_id_to_invite: String) -> bool:
 ## Wavedash parent frame, where there is no launcher to mint it.
 ##
 ## When copy_to_clipboard is true, the launcher copies the link to the user's clipboard.
-## `string_value` is the invite URL.
-func fetch_lobby_invite_link(copy_to_clipboard: bool = false) -> WavedashTypes.StringOptional:
+## Returns the invite URL, or "" when the call failed.
+func fetch_lobby_invite_link(copy_to_clipboard: bool = false) -> String:
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.getLobbyInviteLink(copy_to_clipboard))
@@ -1114,8 +1070,8 @@ func fetch_lobby_invite_link(copy_to_clipboard: bool = false) -> WavedashTypes.S
 		env = _web_unsupported("fetch_lobby_invite_link")
 	_emit_response(env, got_lobby_invite_link)
 	if not env.ok():
-		return null
-	return WavedashTypes.StringOptional.from_data(env.data)
+		return ""
+	return _string_data(env)
 
 #endregion
 
@@ -1123,14 +1079,14 @@ func fetch_lobby_invite_link(copy_to_clipboard: bool = false) -> WavedashTypes.S
 
 # TODO: Consider just passing along file data as PackedByteArray if it's small enough (< 5MB)
 # Faster, no I/O, saves the file system sync overhead
-## Creates a UGC item. `string_value` is the new item's id.
+## Creates a UGC item and returns its id, or "" when the call failed.
 func create_ugc_item(
 	ugc_type: WavedashTypes.UGCType,
 	title: String = "",
 	description: String = "",
 	visibility: WavedashTypes.UGCVisibility = WavedashTypes.UGCVisibility.PUBLIC,
 	local_file_path: String = ""
-) -> WavedashTypes.StringOptional:
+) -> String:
 	if not local_file_path.is_empty():
 		local_file_path = _normalize_user_path(local_file_path)
 	var env: Envelope
@@ -1145,14 +1101,14 @@ func create_ugc_item(
 		env = _web_unsupported("create_ugc_item")
 	_emit_response(env, ugc_item_created)
 	if not env.ok():
-		return null
-	return WavedashTypes.StringOptional.from_data(env.data)
+		return ""
+	return _string_data(env)
 
 ## Updates an existing UGC item. Set only the fields you are changing — one left at its
-## default is not sent, so `""` cannot blank a stored value. `string_value` is its id.
-func update_ugc_item(ugc_id: String, updates: WavedashTypes.UpdateUGCItemArgs = null) -> WavedashTypes.StringOptional:
+## default is not sent, so `""` cannot blank a stored value. Returns its id, or "" on failure.
+func update_ugc_item(ugc_id: String, updates: WavedashTypes.UpdateUGCItemArgs = null) -> String:
 	if _stamped_bad_id_error(ugc_id, "update_ugc_item"):
-		return null
+		return ""
 	# Normalise on the serialised copy, not on `updates` — the caller owns that object.
 	var payload: Dictionary = {} if updates == null else updates.to_dict()
 	if payload.has("filePath"):
@@ -1167,15 +1123,15 @@ func update_ugc_item(ugc_id: String, updates: WavedashTypes.UpdateUGCItemArgs = 
 		env = _web_unsupported("update_ugc_item")
 	_emit_response(env, ugc_item_updated)
 	if not env.ok():
-		return null
-	return WavedashTypes.StringOptional.from_data(env.data)
+		return ""
+	return _string_data(env)
 
 ## Deletes a UGC item: removes the item from the game's UGC collection and frees up the
 ## user's storage quota by the size of the deleted upload.
-## `string_value` is the deleted item's id.
-func delete_ugc_item(ugc_id: String) -> WavedashTypes.StringOptional:
+## Returns the deleted item's id, or "" when the call failed.
+func delete_ugc_item(ugc_id: String) -> String:
 	if _stamped_bad_id_error(ugc_id, "delete_ugc_item"):
-		return null
+		return ""
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.deleteUGCItem(ugc_id))
@@ -1183,8 +1139,8 @@ func delete_ugc_item(ugc_id: String) -> WavedashTypes.StringOptional:
 		env = _web_unsupported("delete_ugc_item")
 	_emit_response(env, ugc_item_deleted)
 	if not env.ok():
-		return null
-	return WavedashTypes.StringOptional.from_data(env.data)
+		return ""
+	return _string_data(env)
 
 ## Lists UGC items with optional filters and pagination.
 ## Set any of `created_by`, `ugc_type`, `title_search`, `num_items` on the args for
@@ -1201,9 +1157,9 @@ func list_ugc_items(args: WavedashTypes.ListUGCItemsArgs = null) -> WavedashType
 		return null
 	return WavedashTypes.PaginatedUGCItems.from_dict(env.data)
 
-func download_ugc_item(ugc_id: String, local_file_path: String) -> WavedashTypes.StringOptional:
+func download_ugc_item(ugc_id: String, local_file_path: String) -> String:
 	if _stamped_bad_id_error(ugc_id, "download_ugc_item"):
-		return null
+		return ""
 	local_file_path = _normalize_user_path(local_file_path)
 	var env: Envelope
 	if is_available():
@@ -1215,14 +1171,14 @@ func download_ugc_item(ugc_id: String, local_file_path: String) -> WavedashTypes
 		env = _web_unsupported("download_ugc_item")
 	_emit_response(env, ugc_item_downloaded)
 	if not env.ok():
-		return null
-	return WavedashTypes.StringOptional.from_data(env.data)
+		return ""
+	return _string_data(env)
 
 #endregion
 
 #region Stats and Achievements
 
-## Pulls this game's stats and achievements down so the try_get_* readers can answer.
+## Pulls this game's stats and achievements down so get_stat_*() and get_achievement() can answer.
 ## False if the fetch failed, which is the only outcome besides success.
 func request_stats() -> bool:
 	var env: Envelope
@@ -1263,39 +1219,17 @@ func store_stats() -> bool:
 	clear_last_error()
 	return true
 
-## Null when the stat could not be read, and null for a fractional one: an int cannot
-## round-trip 12.5, so it is not coerced. Use try_get_stat_float() for those.
-func try_get_stat_int(stat_name: String) -> WavedashTypes.IntOptional:
-	if _stamped_unavailable_error("try_get_stat_int"):
-		return null
-	var result = WavedashJS.getStat(stat_name)
-	if result == null:
-		_stamped_no_answer("try_get_stat_int")
-		return null
-	# A JS number crosses the bridge as a float, so whole ones arrive as 12.0.
-	if not (result is int or (result is float and result == floor(result))):
-		_stamped_wrong_type("try_get_stat_int", stat_name, "int", result)
-		return null
-	clear_last_error()
-	var box := WavedashTypes.IntOptional.new()
-	box.int_value = int(result)
-	return box
+func get_stat_int(stat_name: String) -> int:
+	if _is_web and WavedashJS:
+		var result: Variant = WavedashJS.getStat(stat_name)
+		return int(result) if result is int or result is float else 0
+	return 0
 
-## Null when the stat could not be read, or when it does not hold a number.
-func try_get_stat_float(stat_name: String) -> WavedashTypes.FloatOptional:
-	if _stamped_unavailable_error("try_get_stat_float"):
-		return null
-	var result = WavedashJS.getStat(stat_name)
-	if result == null:
-		_stamped_no_answer("try_get_stat_float")
-		return null
-	if not (result is int or result is float):
-		_stamped_wrong_type("try_get_stat_float", stat_name, "float", result)
-		return null
-	clear_last_error()
-	var box := WavedashTypes.FloatOptional.new()
-	box.float_value = float(result)
-	return box
+func get_stat_float(stat_name: String) -> float:
+	if _is_web and WavedashJS:
+		var result: Variant = WavedashJS.getStat(stat_name)
+		return float(result) if result is int or result is float else 0.0
+	return 0.0
 
 func set_achievement(ach_name: String, store_now: bool = false) -> bool:
 	if _stamped_unavailable_error("set_achievement"):
@@ -1307,11 +1241,11 @@ func set_achievement(ach_name: String, store_now: bool = false) -> bool:
 	clear_last_error()
 	return true
 
-## Null when the achievement could not be read.
-func try_get_achievement(ach_name: String) -> WavedashTypes.BoolOptional:
-	if _stamped_unavailable_error("try_get_achievement"):
-		return null
-	return _bool_box(WavedashJS.getAchievement(ach_name), "try_get_achievement")
+func get_achievement(ach_name: String) -> bool:
+	if _is_web and WavedashJS:
+		var result: Variant = WavedashJS.getAchievement(ach_name)
+		return result is bool and result
+	return false
 
 #endregion
 
@@ -1348,9 +1282,9 @@ func update_user_presence(data: Dictionary) -> bool:
 
 ## Whether the player owns the given paid content. A UX hint for driving in-game
 ## UI, not a security check — the builds server re-gates paid bytes on every
-## request. `bool_value` is true when the player owns the content, and false is a real
-## answer — they do not. Only null is a failed check.
-func fetch_entitlement(content_identifier: String) -> WavedashTypes.BoolOptional:
+## request. True when the player owns the content. False when they do not, and also when
+## the check failed — get_last_error() tells the two apart.
+func fetch_entitlement(content_identifier: String) -> bool:
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.isEntitled(content_identifier))
@@ -1358,13 +1292,13 @@ func fetch_entitlement(content_identifier: String) -> WavedashTypes.BoolOptional
 		env = _web_unsupported("fetch_entitlement")
 	_emit_response(env, got_is_entitled)
 	if not env.ok():
-		return null
-	return WavedashTypes.BoolOptional.from_data(env.data)
+		return false
+	return _bool_data(env)
 
 ## Every paid-content identifier the player owns, for gating several items without
 ## a call each. A UX hint, not a security check — see fetch_entitlement().
-## `strings` is an Array[String] of owned content identifiers.
-func list_entitlements() -> WavedashTypes.StringListOptional:
+## Empty when the call failed, and get_last_error() says why.
+func list_entitlements() -> Array[String]:
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.getEntitlements())
@@ -1372,14 +1306,14 @@ func list_entitlements() -> WavedashTypes.StringListOptional:
 		env = _web_unsupported("list_entitlements")
 	_emit_response(env, got_entitlements)
 	if not env.ok():
-		return null
-	return WavedashTypes.StringListOptional.from_data(env.data)
+		return []
+	return WavedashTypes.string_list_from_data(env.data)
 
 ## Opens the Wavedash paywall for the given content, or resolves immediately if the player
 ## already owns it. The JWT is refreshed on a successful purchase.
-## `bool_value` is true when the player owns it after the flow; false is a real answer —
-## they closed the paywall without buying — not a failure.
-func trigger_paywall(content_identifier: String) -> WavedashTypes.BoolOptional:
+## True when the player owns it after the flow. False when they closed the paywall without
+## buying, and also when the call failed — get_last_error() tells the two apart.
+func trigger_paywall(content_identifier: String) -> bool:
 	var env: Envelope
 	if is_available():
 		env = await _invoke_js(WavedashJS.triggerPaywall(content_identifier))
@@ -1387,8 +1321,8 @@ func trigger_paywall(content_identifier: String) -> WavedashTypes.BoolOptional:
 		env = _web_unsupported("trigger_paywall")
 	_emit_response(env, paywall_resolved)
 	if not env.ok():
-		return null
-	return WavedashTypes.BoolOptional.from_data(env.data)
+		return false
+	return _bool_data(env)
 
 #endregion
 

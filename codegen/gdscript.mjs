@@ -18,14 +18,15 @@ const NUMERIC_FORMS = new Map([
   ["Array[float]", { gd: "Array[int]", init: "[]" }],
 ]);
 
-// gd type -> its default, the box that carries it, and how from_data() takes a
-// raw payload. int()/float()/String()/bool() are NOT total — String() rejects a
-// float, int() rejects an Array — so a payload is tested before it is converted.
+// The GDScript primitives an array payload's element can be, and the test one must pass
+// before it is appended: JSON hands back an untyped Array, and a wrong-typed element is
+// a hard error against a typed one. int()/float()/String()/bool() are NOT total — String()
+// rejects a float, int() rejects an Array — so an element is tested rather than converted.
 const SCALARS = new Map([
-  ["String", { init: '""', box: "StringOptional", accepts: "raw is String", read: "raw" }],
-  ["int", { init: "0", box: "IntOptional", accepts: "raw is int or raw is float", read: "int(raw)" }],
-  ["float", { init: "0.0", box: "FloatOptional", accepts: "raw is int or raw is float", read: "float(raw)" }],
-  ["bool", { init: "false", box: "BoolOptional", accepts: "raw is bool", read: "raw" }],
+  ["String", "item is String"],
+  ["int", "item is int or item is float"],
+  ["float", "item is int or item is float"],
+  ["bool", "item is bool"],
 ]);
 
 const unclassifiedNumbers = new Map();
@@ -113,36 +114,16 @@ function toPascal(name) {
   return name.replace(/^[a-z]/, (c) => c.toUpperCase());
 }
 
-// Deliberately just the two mechanical rules, no irregular-noun table: a plural
-// that reads slightly off (remote_file_metadatas) is a smaller cost than a list of
-// exceptions somebody has to maintain. singularize() in parse.mjs is the same
-// bargain in the other direction.
-function pluralize(name) {
-  const s = toSnake(name);
-  return /[^aeiou]y$/.test(s) ? `${s.slice(0, -1)}ies` : `${s}s`;
-}
-
-// The box a payload is returned in, or null when it needs none. Throws rather
-// than inventing a name for a shape that has never appeared.
-//
-// The field is always named off what the box holds, never off the caller: the plural
-// of the element for a list (FriendListOptional.friends), the type for a scalar
-// (BoolOptional.bool_value).
-const listBox = (element) => ({ field: pluralize(element), name: `${element}ListOptional` });
-function boxFor(t, what) {
-  if (t.model) return null; // an object reference is already nullable
-  if (t.elementModel) {
-    return { ...listBox(t.elementModel), valueType: `Array[${t.elementModel}]` };
-  }
-  if (t.elementEnum) return { ...listBox(t.elementEnum.name), valueType: "Array[int]" };
-  if (SCALARS.has(t.gd)) {
-    return { field: `${toSnake(t.gd)}_value`, name: SCALARS.get(t.gd).box, valueType: t.gd };
-  }
-  if (t.gd === "Array[String]") return { ...listBox("String"), valueType: "Array[String]" };
+// The GDScript type an async payload comes back as: a model bare, a list as a typed
+// Array, a scalar bare. Throws rather than inventing a spelling for a shape that has
+// never appeared.
+function returnTypeFor(t, what) {
+  if (t.model) return t.model;
+  if (t.gd.startsWith("Array[") || SCALARS.has(t.gd)) return t.gd;
   throw new Error(
     `[codegen] ${what} has payload type ${t.gd}${t.note ? ` (${t.note})` : ""}, which has no\n` +
-      `value box. Add one to boxFor() in gdscript.mjs -- naming it after the type it\n` +
-      `holds, not after the method -- or resolve the type so it maps to a model.`
+      `GDScript return type. Add one to returnTypeFor() in gdscript.mjs, or resolve the\n` +
+      `type so it maps to a model.`
   );
 }
 
@@ -154,38 +135,34 @@ function elementExpr(t) {
 }
 
 // The page is trusted to send the right shape, but "trusted" is not "checked": an
-// element of the wrong type used to abort from_data() outright, because from_dict()
-// takes a typed Dictionary and a String argument is a hard error. That made a
-// `-> LobbyUserListOptional` evaluate to null, which the declared return type says
-// cannot happen. Skip what does not fit instead, the way try_get_lobby_users() does.
+// element of the wrong type would abort the decode outright, because from_dict()
+// takes a typed Dictionary and a String argument is a hard error. Skip what does not
+// fit instead, so a bad element costs one entry rather than the whole list.
 function elementGuard(t) {
   if (t.elementModel) return "item is Dictionary";
   if (t.elementEnum) return null; // the decoders map anything unknown to UNKNOWN
   const inner = t.gd.slice("Array[".length, -1);
-  const s = SCALARS.get(inner);
-  return s ? s.accepts.replaceAll("raw", "item") : null;
+  return SCALARS.get(inner) ?? null;
 }
 
-// Assigning null to a typed field is a runtime error, so every branch is guarded
-// and a failed call simply leaves the default in place.
-function hydrateData(t, field, indent) {
+// The typed-Array decoder for a list payload. JSON hands back an untyped Array, and
+// Godot rejects that against a typed one, so every element is appended through the
+// same guard from_dict() uses.
+function listDecoder(name, t, indent) {
   const L = [];
   const p = (s) => L.push(`${indent}${s}`);
-  if (t.gd.startsWith("Array")) {
-    const guard = elementGuard(t);
-    p("if raw is Array:");
-    p("\tfor item in raw:");
-    if (guard) {
-      p(`\t\tif ${guard}:`);
-      p(`\t\t\to.${field}.append(${elementExpr(t)})`);
-    } else {
-      p(`\t\to.${field}.append(${elementExpr(t)})`);
-    }
+  const guard = elementGuard(t);
+  p(`static func ${name}(raw: Variant) -> ${t.gd}:`);
+  p(`\tvar items: ${t.gd} = []`);
+  p("\tif raw is Array:");
+  p("\t\tfor item in raw:");
+  if (guard) {
+    p(`\t\t\tif ${guard}:`);
+    p(`\t\t\t\titems.append(${elementExpr(t)})`);
   } else {
-    const s = SCALARS.get(t.gd);
-    p(`if ${s.accepts}:`);
-    p(`\to.${field} = ${s.read}`);
+    p(`\t\t\titems.append(${elementExpr(t)})`);
   }
+  p("\treturn items");
   return L;
 }
 
@@ -556,8 +533,8 @@ export function emit(ir) {
   p("# that hydrates the JSON the JS bridge hands to Godot. Reference as");
   p("# WavedashTypes.<ClassName>.");
   p("#");
-  p("# Async calls resolve to one of these, or to a value box when the payload is a");
-  p("# String/bool/Array — see the value box section below.");
+  p("# Async calls resolve to one of these, or to a bare String/bool/Array — see the");
+  p("# table at the end.");
   p("#");
   p("# Members follow the upstream API's order, not GDScript's section order.");
   p("# gdlint: disable=class-definitions-order");
@@ -594,73 +571,41 @@ export function emit(ir) {
     );
   }
 
-  // The scalar boxes are emitted unconditionally because the SDK's sync getters
-  // use them; sdk-js declares no method to discover them from. So does LobbyUser,
-  // which try_get_lobby_users() reads out of the local lobby cache.
-  const boxes = new Map(); // name -> { field, valueType, t, methods[] }
-  const declareBox = (t, method) => {
-    const b = boxFor(t, method ? `${method}()` : `${t.gd} box`);
-    if (!b) return; // resolves to a model; returned bare
-    const entry = boxes.get(b.name) ?? { field: b.field, valueType: b.valueType, t, methods: [] };
-    if (entry.valueType !== b.valueType) {
-      throw new Error(
-        `[codegen] ${method}() wants ${b.name} to hold ${b.valueType} but it already\n` +
-          `holds ${entry.valueType}. Two payload types map to one box name — rename\n` +
-          `the upstream type rather than sharing the box.`
-      );
-    }
+  // Which element types come back as a list: every list an async method resolves to,
+  // plus LobbyUser, which get_lobby_users() reads out of the local lobby cache and
+  // sdk-js declares no async method for.
+  const listElements = new Map(); // element name -> { t, methods[] }
+  const declareList = (t, method) => {
+    if (!t.gd.startsWith("Array[")) return;
+    const element = t.elementModel ?? t.elementEnum?.name ?? t.gd.slice("Array[".length, -1);
+    const entry = listElements.get(element) ?? { t, methods: [] };
     if (method) entry.methods.push(method);
-    boxes.set(b.name, entry);
+    listElements.set(element, entry);
   };
-  for (const [gd, s] of SCALARS) declareBox({ gd, init: s.init });
-  declareBox({ gd: "Array", init: "[]", elementModel: "LobbyUser" });
-  for (const { m, t } of methodRows) declareBox(t, m.name);
+  declareList({ gd: "Array[LobbyUser]", init: "[]", elementModel: "LobbyUser" });
+  for (const { m, t } of methodRows) declareList(t, m.name);
 
-  const boxClash = [...boxes.keys()].filter(
-    (n) => known.has(n) || aliasEnums.has(n) || handNames.includes(n)
-  );
-  if (boxClash.length) {
-    throw new Error(
-      `[codegen] value box ${boxClash.join(", ")} collides with a model, enum or\n` +
-        `hand-written class of the same name. A box is named after the type it holds,\n` +
-        `so the fix is to rename the other one.`
-    );
-  }
-  p("# --------------------------------------------------------------------------");
-  p("# Value boxes. GDScript has no nullable String/bool/Array, so a call whose");
-  p("# payload is one of those hands back a box: check for null, then read its field.");
-  p("# A call resolving to a model returns the model — that is already nullable.");
-  p("#");
-  p("# The `Optional` suffix is the whole reason these exist: the box is what carries");
-  p("# the null a bare String or bool cannot. Null-check before reading the field.");
-  p("#");
-  p("# Boxes are named after what they hold, so the meaning comes from the method you");
-  p("# called: fetch_user_jwt().string_value is the JWT, create_lobby().string_value is");
-  p("# the lobby id. The field is named for the box, never a bare `value`.");
-  p("#");
-  p("# From an async call, null is always a failure and WavedashSDK.get_last_error()");
-  p("# says why. From a sync getter it can also mean the key is not set — which is");
-  p('# why those box at all: "" and 0 are things a game legitimately stores.');
-  p("# --------------------------------------------------------------------------");
-  p("");
   // sdk-js spelling, not snake_case: the addon renames some of these (isEntitled ->
   // fetch_entitlement) and skips others, so a GDScript-looking name here would be a
   // call that does not exist.
-  for (const [name, { field, valueType, t, methods }] of boxes) {
-    const calls = methods.map((n) => `${n}()`).sort();
-    p(
-      calls.length
-        ? `## Resolved by (sdk-js): ${calls.join(", ")}`
-        : `## Holds ${valueType}. For the sync getters — no async call resolves to one.`
-    );
-    p(`class ${name} extends RefCounted:`);
-    p(`\tvar ${field}: ${valueType} = ${t.init}`);
+  const resolvedBy = (methods) =>
+    methods.length
+      ? `## Resolved by (sdk-js): ${methods.map((n) => `${n}()`).sort().join(", ")}`
+      : "## No async call resolves to one; a sync getter reads it off the page.";
+
+  // A model's decoder lives on the model (below). A scalar has no class to hang it on,
+  // so its decoder is a static on WavedashTypes itself.
+  const scalarLists = [...listElements].filter(([, { t }]) => !t.elementModel);
+  if (scalarLists.length) {
+    p("# --------------------------------------------------------------------------");
+    p("# Typed-Array decoders for the list payloads whose element is not a model.");
+    p("# --------------------------------------------------------------------------");
     p("");
-    p(`\tstatic func from_data(raw) -> ${name}:`);
-    p(`\t\tvar o := ${name}.new()`);
-    for (const line of hydrateData(t, field, "\t\t")) p(line);
-    p(`\t\treturn o`);
-    p("");
+    for (const [element, { t, methods }] of scalarLists) {
+      p(resolvedBy(methods));
+      for (const line of listDecoder(`${toSnake(element)}_list_from_data`, t, "")) p(line);
+      p("");
+    }
   }
 
   p("# --------------------------------------------------------------------------");
@@ -670,6 +615,7 @@ export function emit(ir) {
   p("");
   for (const line of hand.split("\n")) p(line);
 
+  const emittedLists = new Set();
   for (const { model, fields: mapped } of plans) {
     p(docComment(model.doc, "").trimEnd() || `## ${model.name}`);
     p(`class ${model.name} extends RefCounted:`);
@@ -716,6 +662,14 @@ export function emit(ir) {
     }
     p("\t\treturn o");
     p("");
+    const asList = listElements.get(model.name);
+    if (asList) {
+      p(`\t${resolvedBy(asList.methods)}`);
+      for (const line of listDecoder("list_from_data", asList.t, "\t")) p(line);
+      p("");
+      emittedLists.add(model.name);
+    }
+
 
     // An optional field still holding its default is OMITTED, not sent: `foo?:`
     // means the JS side branches on the key being absent, so sending `""` would
@@ -748,6 +702,18 @@ export function emit(ir) {
     }
     p(`\t\treturn d`);
     p("");
+  }
+
+  // A list element that resolved to a model name the emitter never wrote would leave
+  // WavedashSDK.gd calling a list_from_data() that does not exist.
+  const missingLists = [...listElements]
+    .filter(([n, { t }]) => t.elementModel && !emittedLists.has(n))
+    .map(([n]) => n);
+  if (missingLists.length) {
+    throw new Error(
+      `[codegen] ${missingLists.join(", ")} is returned as a list but no model of that\n` +
+        `name was emitted, so it has no list_from_data(). Resolve the element type.`
+    );
   }
 
   const eventStrings = new Map(
@@ -798,8 +764,7 @@ export function emit(ir) {
   p("# a hydrated model read as res.name. Do it inside a major version bump.");
   const pad = Math.max(...methodRows.map(({ m }) => m.name.length + 2));
   for (const { m, t } of methodRows) {
-    const box = boxFor(t, `${m.name}()`);
-    const ret = box ? box.name : t.model;
+    const ret = returnTypeFor(t, `${m.name}()`);
     p(`#   ${`${m.name}()`.padEnd(pad)} -> ${ret}  (${m.dataType})`);
   }
 

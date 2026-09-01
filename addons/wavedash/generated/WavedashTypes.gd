@@ -5,8 +5,8 @@
 # that hydrates the JSON the JS bridge hands to Godot. Reference as
 # WavedashTypes.<ClassName>.
 #
-# Async calls resolve to one of these, or to a value box when the payload is a
-# String/bool/Array — see the value box section below.
+# Async calls resolve to one of these, or to a bare String/bool/Array — see the
+# table at the end.
 #
 # Members follow the upstream API's order, not GDScript's section order.
 # gdlint: disable=class-definitions-order
@@ -162,133 +162,17 @@ static func p2p_packet_drop_reason_to_string(v: P2PPacketDropReason) -> String:
 	return ""
 
 # --------------------------------------------------------------------------
-# Value boxes. GDScript has no nullable String/bool/Array, so a call whose
-# payload is one of those hands back a box: check for null, then read its field.
-# A call resolving to a model returns the model — that is already nullable.
-#
-# The `Optional` suffix is the whole reason these exist: the box is what carries
-# the null a bare String or bool cannot. Null-check before reading the field.
-#
-# Boxes are named after what they hold, so the meaning comes from the method you
-# called: fetch_user_jwt().string_value is the JWT, create_lobby().string_value is
-# the lobby id. The field is named for the box, never a bare `value`.
-#
-# From an async call, null is always a failure and WavedashSDK.get_last_error()
-# says why. From a sync getter it can also mean the key is not set — which is
-# why those box at all: "" and 0 are things a game legitimately stores.
+# Typed-Array decoders for the list payloads whose element is not a model.
 # --------------------------------------------------------------------------
 
-## Resolved by (sdk-js): createLobby(), createUGCItem(), deleteRemoteFile(), deleteUGCItem(), downloadRemoteDirectory(), downloadRemoteFile(), downloadUGCItem(), getLobbyInviteLink(), getUserJwt(), leaveLobby(), updateUGCItem(), uploadRemoteFile()
-class StringOptional extends RefCounted:
-	var string_value: String = ""
-
-	static func from_data(raw) -> StringOptional:
-		var o := StringOptional.new()
-		if raw is String:
-			o.string_value = raw
-		return o
-
-## Holds int. For the sync getters — no async call resolves to one.
-class IntOptional extends RefCounted:
-	var int_value: int = 0
-
-	static func from_data(raw) -> IntOptional:
-		var o := IntOptional.new()
-		if raw is int or raw is float:
-			o.int_value = int(raw)
-		return o
-
-## Holds float. For the sync getters — no async call resolves to one.
-class FloatOptional extends RefCounted:
-	var float_value: float = 0.0
-
-	static func from_data(raw) -> FloatOptional:
-		var o := FloatOptional.new()
-		if raw is int or raw is float:
-			o.float_value = float(raw)
-		return o
-
-## Resolved by (sdk-js): inviteUserToLobby(), isEntitled(), isEntitled_EXPERIMENTAL(), joinLobby(), remoteFileExists(), requestStats(), triggerPaywall(), triggerPaywall_EXPERIMENTAL(), updateUserPresence()
-class BoolOptional extends RefCounted:
-	var bool_value: bool = false
-
-	static func from_data(raw) -> BoolOptional:
-		var o := BoolOptional.new()
-		if raw is bool:
-			o.bool_value = raw
-		return o
-
-## Holds Array[LobbyUser]. For the sync getters — no async call resolves to one.
-class LobbyUserListOptional extends RefCounted:
-	var lobby_users: Array[LobbyUser] = []
-
-	static func from_data(raw) -> LobbyUserListOptional:
-		var o := LobbyUserListOptional.new()
-		if raw is Array:
-			for item in raw:
-				if item is Dictionary:
-					o.lobby_users.append(LobbyUser.from_dict(item))
-		return o
-
-## Resolved by (sdk-js): listFriends()
-class FriendListOptional extends RefCounted:
-	var friends: Array[Friend] = []
-
-	static func from_data(raw) -> FriendListOptional:
-		var o := FriendListOptional.new()
-		if raw is Array:
-			for item in raw:
-				if item is Dictionary:
-					o.friends.append(Friend.from_dict(item))
-		return o
-
-## Resolved by (sdk-js): getMyLeaderboardEntries(), listLeaderboardEntries(), listLeaderboardEntriesAroundUser()
-class LeaderboardEntryListOptional extends RefCounted:
-	var leaderboard_entries: Array[LeaderboardEntry] = []
-
-	static func from_data(raw) -> LeaderboardEntryListOptional:
-		var o := LeaderboardEntryListOptional.new()
-		if raw is Array:
-			for item in raw:
-				if item is Dictionary:
-					o.leaderboard_entries.append(LeaderboardEntry.from_dict(item))
-		return o
-
-## Resolved by (sdk-js): listRemoteDirectory()
-class RemoteFileMetadataListOptional extends RefCounted:
-	var remote_file_metadatas: Array[RemoteFileMetadata] = []
-
-	static func from_data(raw) -> RemoteFileMetadataListOptional:
-		var o := RemoteFileMetadataListOptional.new()
-		if raw is Array:
-			for item in raw:
-				if item is Dictionary:
-					o.remote_file_metadatas.append(RemoteFileMetadata.from_dict(item))
-		return o
-
-## Resolved by (sdk-js): listAvailableLobbies()
-class LobbyListOptional extends RefCounted:
-	var lobbies: Array[Lobby] = []
-
-	static func from_data(raw) -> LobbyListOptional:
-		var o := LobbyListOptional.new()
-		if raw is Array:
-			for item in raw:
-				if item is Dictionary:
-					o.lobbies.append(Lobby.from_dict(item))
-		return o
-
 ## Resolved by (sdk-js): getEntitlements(), getEntitlements_EXPERIMENTAL()
-class StringListOptional extends RefCounted:
-	var strings: Array[String] = []
-
-	static func from_data(raw) -> StringListOptional:
-		var o := StringListOptional.new()
-		if raw is Array:
-			for item in raw:
-				if item is String:
-					o.strings.append(item)
-		return o
+static func string_list_from_data(raw: Variant) -> Array[String]:
+	var items: Array[String] = []
+	if raw is Array:
+		for item in raw:
+			if item is String:
+				items.append(item)
+	return items
 
 # --------------------------------------------------------------------------
 # Hand-written, from codegen/handwritten_types.gd — types with no sdk-js
@@ -372,6 +256,15 @@ class RemoteFileMetadata extends RefCounted:
 		o.size = d.get("size", 0)
 		o.etag = d.get("etag", "")
 		return o
+
+	## Resolved by (sdk-js): listRemoteDirectory()
+	static func list_from_data(raw: Variant) -> Array[RemoteFileMetadata]:
+		var items: Array[RemoteFileMetadata] = []
+		if raw is Array:
+			for item in raw:
+				if item is Dictionary:
+					items.append(RemoteFileMetadata.from_dict(item))
+		return items
 
 	func to_dict() -> Dictionary:
 		var d := {}
@@ -900,6 +793,15 @@ class LobbyUser extends RefCounted:
 		o.username = d.get("username", "")
 		return o
 
+	## No async call resolves to one; a sync getter reads it off the page.
+	static func list_from_data(raw: Variant) -> Array[LobbyUser]:
+		var items: Array[LobbyUser] = []
+		if raw is Array:
+			for item in raw:
+				if item is Dictionary:
+					items.append(LobbyUser.from_dict(item))
+		return items
+
 	func to_dict() -> Dictionary:
 		var d := {}
 		d["isHost"] = is_host
@@ -955,6 +857,15 @@ class Lobby extends RefCounted:
 		o.player_count = d.get("playerCount", 0)
 		o.visibility = WavedashTypes.lobby_visibility_from_int(d.get("visibility", -1))
 		return o
+
+	## Resolved by (sdk-js): listAvailableLobbies()
+	static func list_from_data(raw: Variant) -> Array[Lobby]:
+		var items: Array[Lobby] = []
+		if raw is Array:
+			for item in raw:
+				if item is Dictionary:
+					items.append(Lobby.from_dict(item))
+		return items
 
 	func to_dict() -> Dictionary:
 		var d := {}
@@ -1031,6 +942,15 @@ class Friend extends RefCounted:
 		o.username = d.get("username", "")
 		return o
 
+	## Resolved by (sdk-js): listFriends()
+	static func list_from_data(raw: Variant) -> Array[Friend]:
+		var items: Array[Friend] = []
+		if raw is Array:
+			for item in raw:
+				if item is Dictionary:
+					items.append(Friend.from_dict(item))
+		return items
+
 	func to_dict() -> Dictionary:
 		var d := {}
 		if avatar_url != "":
@@ -1082,6 +1002,15 @@ class LeaderboardEntry extends RefCounted:
 		o.user_id = d.get("userId", "")
 		o.username = d.get("username", "")
 		return o
+
+	## Resolved by (sdk-js): getMyLeaderboardEntries(), listLeaderboardEntries(), listLeaderboardEntriesAroundUser()
+	static func list_from_data(raw: Variant) -> Array[LeaderboardEntry]:
+		var items: Array[LeaderboardEntry] = []
+		if raw is Array:
+			for item in raw:
+				if item is Dictionary:
+					items.append(LeaderboardEntry.from_dict(item))
+		return items
 
 	func to_dict() -> Dictionary:
 		var d := {}
@@ -1250,37 +1179,37 @@ static func parse_event(event_name: String, payload: Dictionary) -> RefCounted:
 # codegen/README.md). Resolving one IS a breaking change for callers:
 # unresolved, the payload is raw JSON read as res.value["name"]; resolved, it is
 # a hydrated model read as res.name. Do it inside a major version bump.
-#   getUserJwt()                       -> StringOptional  (string)
-#   listFriends()                      -> FriendListOptional  (Friend[])
+#   getUserJwt()                       -> String  (string)
+#   listFriends()                      -> Array[Friend]  (Friend[])
 #   getLeaderboard()                   -> Leaderboard  (Leaderboard)
 #   getOrCreateLeaderboard()           -> Leaderboard  (Leaderboard)
-#   getMyLeaderboardEntries()          -> LeaderboardEntryListOptional  (LeaderboardEntries)
-#   listLeaderboardEntriesAroundUser() -> LeaderboardEntryListOptional  (LeaderboardEntries)
-#   listLeaderboardEntries()           -> LeaderboardEntryListOptional  (LeaderboardEntries)
+#   getMyLeaderboardEntries()          -> Array[LeaderboardEntry]  (LeaderboardEntries)
+#   listLeaderboardEntriesAroundUser() -> Array[LeaderboardEntry]  (LeaderboardEntries)
+#   listLeaderboardEntries()           -> Array[LeaderboardEntry]  (LeaderboardEntries)
 #   uploadLeaderboardScore()           -> UpsertedLeaderboardEntry  (UpsertedLeaderboardEntry)
-#   createUGCItem()                    -> StringOptional  (GenericId<"userGeneratedContent">)
-#   updateUGCItem()                    -> StringOptional  (GenericId<"userGeneratedContent">)
-#   deleteUGCItem()                    -> StringOptional  (GenericId<"userGeneratedContent">)
-#   downloadUGCItem()                  -> StringOptional  (GenericId<"userGeneratedContent">)
+#   createUGCItem()                    -> String  (GenericId<"userGeneratedContent">)
+#   updateUGCItem()                    -> String  (GenericId<"userGeneratedContent">)
+#   deleteUGCItem()                    -> String  (GenericId<"userGeneratedContent">)
+#   downloadUGCItem()                  -> String  (GenericId<"userGeneratedContent">)
 #   listUGCItems()                     -> PaginatedUGCItems  (PaginatedUGCItems)
-#   deleteRemoteFile()                 -> StringOptional  (string)
-#   downloadRemoteFile()               -> StringOptional  (string)
-#   remoteFileExists()                 -> BoolOptional  (boolean)
-#   uploadRemoteFile()                 -> StringOptional  (string)
-#   listRemoteDirectory()              -> RemoteFileMetadataListOptional  (RemoteFileMetadata[])
-#   downloadRemoteDirectory()          -> StringOptional  (string)
-#   requestStats()                     -> BoolOptional  (boolean)
-#   createLobby()                      -> StringOptional  (GenericId<"lobbies">)
-#   joinLobby()                        -> BoolOptional  (boolean)
-#   listAvailableLobbies()             -> LobbyListOptional  (Lobby[])
+#   deleteRemoteFile()                 -> String  (string)
+#   downloadRemoteFile()               -> String  (string)
+#   remoteFileExists()                 -> bool  (boolean)
+#   uploadRemoteFile()                 -> String  (string)
+#   listRemoteDirectory()              -> Array[RemoteFileMetadata]  (RemoteFileMetadata[])
+#   downloadRemoteDirectory()          -> String  (string)
+#   requestStats()                     -> bool  (boolean)
+#   createLobby()                      -> String  (GenericId<"lobbies">)
+#   joinLobby()                        -> bool  (boolean)
+#   listAvailableLobbies()             -> Array[Lobby]  (Lobby[])
 #   getLobby()                         -> Lobby  (Lobby)
-#   leaveLobby()                       -> StringOptional  (GenericId<"lobbies">)
-#   inviteUserToLobby()                -> BoolOptional  (boolean)
-#   getLobbyInviteLink()               -> StringOptional  (string)
-#   isEntitled()                       -> BoolOptional  (boolean)
-#   isEntitled_EXPERIMENTAL()          -> BoolOptional  (boolean)
-#   getEntitlements()                  -> StringListOptional  (string[])
-#   getEntitlements_EXPERIMENTAL()     -> StringListOptional  (string[])
-#   triggerPaywall()                   -> BoolOptional  (boolean)
-#   triggerPaywall_EXPERIMENTAL()      -> BoolOptional  (boolean)
-#   updateUserPresence()               -> BoolOptional  (boolean)
+#   leaveLobby()                       -> String  (GenericId<"lobbies">)
+#   inviteUserToLobby()                -> bool  (boolean)
+#   getLobbyInviteLink()               -> String  (string)
+#   isEntitled()                       -> bool  (boolean)
+#   isEntitled_EXPERIMENTAL()          -> bool  (boolean)
+#   getEntitlements()                  -> Array[String]  (string[])
+#   getEntitlements_EXPERIMENTAL()     -> Array[String]  (string[])
+#   triggerPaywall()                   -> bool  (boolean)
+#   triggerPaywall_EXPERIMENTAL()      -> bool  (boolean)
+#   updateUserPresence()               -> bool  (boolean)
