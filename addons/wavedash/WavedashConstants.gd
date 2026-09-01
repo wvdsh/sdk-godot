@@ -17,6 +17,7 @@ const JS_EVENT_BACKEND_RECONNECTING = "BackendReconnecting"
 const JS_EVENT_BACKEND_DISCONNECTED = "BackendDisconnected"
 const JS_EVENT_FULLSCREEN_CHANGED = "FullscreenChanged"
 const JS_EVENT_MUTE_CHANGED = "MuteChanged"
+const JS_EVENT_ENTITLEMENTS_GRANTED = "EntitlementsGranted"
 
 
 # Platform Types
@@ -90,3 +91,6 @@ const RESULT_BAD_REQUEST = 400
 const RESULT_UNPROCESSABLE_ENTITY = 422
 const RESULT_TOO_MANY_REQUESTS = 429
 const RESULT_SERVICE_UNAVAILABLE = 503
+
+# Largest magnitude a GD int can have and still round-trip through a JS Number without losing precision.
+const JS_MAX_INTEGER := 1 << 53

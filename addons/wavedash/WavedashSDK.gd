@@ -19,6 +19,8 @@ var _cached_lobby_id : String = ""
 var _p2p_outgoing_buffer : JavaScriptObject
 var _p2p_outgoing_buffer_size : int = 0
 
+var _js_cast : JavaScriptObject
+
 # Godot compatibility checks for which P2P method to use
 # Initialized at startup
 var _has_js_buffer_transfer : bool = false
@@ -84,6 +86,7 @@ signal user_presence_updated(payload)
 signal got_is_entitled(payload)
 signal got_entitlements(payload)
 signal paywall_resolved(payload)
+signal entitlements_granted(payload)
 signal content_downloaded(payload)
 
 func _log(msg: String) -> void:
@@ -92,6 +95,13 @@ func _log(msg: String) -> void:
 
 func _web_unsupported(method_name: String) -> Dictionary:
 	return {"success": false, "data": null, "message": "%s is only supported in Web builds" % method_name}
+
+func _install_js_cast() -> void:
+	JavaScriptBridge.eval("window.__wavedashCast = { asString: (v) => String(v), asNumber: (v) => Number(v), asBool: (v) => Boolean(v) };")
+	_js_cast = JavaScriptBridge.get_interface("__wavedashCast")
+	if not _js_cast:
+		push_error("WavedashSDK: could not install the JS value casting interface")
+		return
 
 func _enter_tree():
 	_log("_enter_tree() called, platform: %s" % OS.get_name())
@@ -112,6 +122,7 @@ func _enter_tree():
 		_has_js_buffer_transfer = JavaScriptBridge.has_method("js_buffer_to_packed_byte_array")
 		if not _has_js_buffer_transfer:
 			_eval_returns_byte_array = JavaScriptBridge.eval("new Uint8Array([1,2,3])") is PackedByteArray
+		_install_js_cast()
 
 func init(config: Dictionary):
 	assert(_entered_tree, "WavedashSDK.init() called before WavedashSDK was added to the tree")
@@ -350,14 +361,14 @@ func get_leaderboard_entries(leaderboard_id: String, offset: int, limit: int, fr
 
 ## Posts a score to a leaderboard.
 ## Pass ugc_id to attach a UGC item (e.g. a replay) to the entry, or "" for none.
-## metadata attaches small key/value data to the entry — String, int and float values
-## only (e.g. {"character": "knight", "deaths": 3}).
+## metadata attaches small key/value data to the entry — String, int, float and bool
+## values only (e.g. {"character": "knight", "deaths": 3, "no_hit": true}).
 ## Store larger payloads as UGC and attach them via ugc_id instead.
 ## Metadata belongs to the score it was submitted with: a score that gets written
 ## replaces it, and an empty dictionary clears it. A score that keep_best rejects leaves
 ## the existing entry — metadata included — untouched.
-## Response shape: { success, data: { entry, submission, totalEntries }, message },
-## where entry carries the persisted metadata back.
+## Response shape: { success, data: <entry>, message }, where data.metadata carries
+## the persisted metadata back.
 func post_leaderboard_score(leaderboard_id: String, score: int, keep_best: bool, ugc_id: String = "", metadata: Dictionary = {}):
 	if _is_web and WavedashJS:
 		# The JS SDK parses the metadata JSON string, and reads null as an omitted argument.
@@ -553,23 +564,38 @@ func get_lobby_host_id(lobby_id: String) -> String:
 		return result if result else ""
 	return ""
 
+func has_lobby_data(lobby_id: String, key: String) -> bool:
+	if _is_web and WavedashJS:
+		return WavedashJS.getLobbyData(lobby_id, key) != null
+	return false
+
 func get_lobby_data_string(lobby_id: String, key: String) -> String:
 	if _is_web and WavedashJS:
 		var result = WavedashJS.getLobbyData(lobby_id, key)
-		return result if result != null else ""
+
+		return _js_cast.asString(result) if result != null else ""
 	return ""
 
 func get_lobby_data_int(lobby_id: String, key: String) -> int:
 	if _is_web and WavedashJS:
 		var result = WavedashJS.getLobbyData(lobby_id, key)
-		return int(result) if result != null else 0
+		if result == null:
+			return 0
+		var num: float = _js_cast.asNumber(result)
+		return int(num) if is_finite(num) else 0
 	return 0
 
 func get_lobby_data_float(lobby_id: String, key: String) -> float:
 	if _is_web and WavedashJS:
 		var result = WavedashJS.getLobbyData(lobby_id, key)
-		return float(result) if result != null else 0.0
+		return _js_cast.asNumber(result) if result != null else 0.0
 	return 0.0
+
+func get_lobby_data_bool(lobby_id: String, key: String) -> bool:
+	if _is_web and WavedashJS:
+		var result = WavedashJS.getLobbyData(lobby_id, key)
+		return _js_cast.asBool(result) if result != null else false
+	return false
 
 func set_lobby_data_string(lobby_id: String, key: String, value: String) -> bool:
 	if _is_web and WavedashJS:
@@ -577,11 +603,19 @@ func set_lobby_data_string(lobby_id: String, key: String, value: String) -> bool
 	return false
 
 func set_lobby_data_int(lobby_id: String, key: String, value: int) -> bool:
+	if value > Constants.JS_MAX_INTEGER or value < -Constants.JS_MAX_INTEGER:
+		push_error("set_lobby_data_int: %d exceeds JS safe integer range (±2^53). Use set_lobby_data_string for larger values." % value)
+		return false
 	if _is_web and WavedashJS:
 		return WavedashJS.setLobbyData(lobby_id, key, value)
 	return false
 
 func set_lobby_data_float(lobby_id: String, key: String, value: float) -> bool:
+	if _is_web and WavedashJS:
+		return WavedashJS.setLobbyData(lobby_id, key, value)
+	return false
+
+func set_lobby_data_bool(lobby_id: String, key: String, value: bool) -> bool:
 	if _is_web and WavedashJS:
 		return WavedashJS.setLobbyData(lobby_id, key, value)
 	return false
@@ -1177,6 +1211,10 @@ func _dispatch_js_event(args):
 			var data = JSON.parse_string(payload)
 			_log("Mute changed: %s" % str(payload))
 			mute_changed.emit(data)
+		Constants.JS_EVENT_ENTITLEMENTS_GRANTED:
+			var data = JSON.parse_string(payload)
+			_log("Purchase completed: %s" % str(payload))
+			entitlements_granted.emit(data)
 		_:
 			push_warning("[WavedashSDK] Received unknown event from JS: " + method_name)
 
