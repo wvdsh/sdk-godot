@@ -1,0 +1,14 @@
+# Only the rules that fight this codebase's shape are relaxed; the naming rules stay
+# strict and the intentional violations are silenced inline at their definitions.
+#
+# class-definitions-order is NOT relaxed here. The generated files emit members in wire
+#   order, which is the point of generating them, so each carries its own file-wide
+#   `# gdlint: disable=class-definitions-order` emitted by codegen/gdscript.mjs. Keeping
+#   the rule on globally is what holds the hand-written addon to GDScript's order.
+# max-line-length: generated doc comments carry upstream TS type expressions verbatim.
+# max-public-methods: this is an SDK facade; a low cap is the wrong shape for it.
+disable: []
+
+max-line-length: 300
+max-file-lines: 2000
+max-public-methods: 100
