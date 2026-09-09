@@ -1,19 +1,21 @@
 @tool
 extends HBoxContainer
 
-## "Export preset: <dropdown>" row. Also drives the Create Wavedash Export button, a
-## sibling below this row so it can span the dock's full width. Whether the chosen preset
-## can actually build is reported by WavedashBuildUploadRow, not here.
+## "Export preset: <dropdown>" row. Whether the chosen preset can actually build is
+## reported by WavedashBuildUploadRow, not here.
 
 const WavedashExportPresets = preload("wavedash_export_presets.gd")
 const WavedashDialogs = preload("wavedash_dialogs.gd")
 const WavedashIconTheme = preload("wavedash_icon_theme.gd")
 const PresetIcon = preload("assets/package_white.svg")
+const CreateIcon = preload("assets/package_plus_white.svg")
 const WavedashCompat = preload("wavedash_compat.gd")
 
 ## Long enough to cover EditorExport's own 0.8s save timer.
 const EXPORT_PRESETS_SAVE_DELAY := 1.0
 const ROOT_EXPORT_PATH_REJECTED := "\"%s\" would export to the project root. Choose or create a folder for the build -- Wavedash uploads whichever folder the export lands in."
+
+const CREATE_NEW_ID := "__create_new__"
 
 signal log_line(text: String)
 signal status_changed
@@ -22,14 +24,13 @@ signal status_changed
 @onready var _in_edited_scene := WavedashCompat.is_part_of_edited_scene(self)
 
 @onready var _dropdown: OptionButton = $Dropdown
-@onready var _none_found_label: Label = $NoneFoundLabel
-@onready var _create_button: Button = %CreateDefaultButton
+@onready var _create_button: Button = $CreateButton
 
 func _ready() -> void:
 	if _in_edited_scene:
 		return
 	_dropdown.item_selected.connect(_on_preset_selected)
-	_create_button.pressed.connect(_on_create_default_pressed)
+	_create_button.pressed.connect(_on_create_pressed)
 	visibility_changed.connect(_refresh)
 	WavedashIconTheme.apply_to_button(_create_button)
 	_refresh()
@@ -63,24 +64,42 @@ func _refresh_once_saved() -> void:
 func _refresh() -> void:
 	var names := WavedashExportPresets.get_available_presets()
 	_dropdown.visible = not names.is_empty()
-	_none_found_label.visible = names.is_empty()
+	_create_button.visible = names.is_empty()
 	_dropdown.clear()
-	var active_name := WavedashExportPresets.get_active_preset()
 	for i in names.size():
 		_dropdown.add_icon_item(PresetIcon, names[i])
-		if names[i] == active_name:
-			_dropdown.select(i)
+		_dropdown.set_item_metadata(i, names[i])
+	_dropdown.add_separator()
+	_add_action_item(CreateIcon, "Create New Wavedash Export...", CREATE_NEW_ID)
+	_select_active()
 	WavedashIconTheme.apply_to_dropdown(_dropdown)
 	status_changed.emit()
+
+func _add_action_item(icon: Texture2D, label: String, id: String) -> void:
+	_dropdown.add_icon_item(icon, label)
+	_dropdown.set_item_metadata(_dropdown.item_count - 1, id)
+
+## OptionButton shows whatever was picked, actions included.
+func _select_active() -> void:
+	var active_name := WavedashExportPresets.get_active_preset()
+	for i in _dropdown.item_count:
+		if _dropdown.get_item_metadata(i) == active_name:
+			_dropdown.select(i)
+			return
 
 ## Changing preset changes whether a build is possible, so announce it rather
 ## than rebuilding the dropdown from inside its own item_selected handler.
 func _on_preset_selected(index: int) -> void:
-	WavedashExportPresets.set_active_preset(_dropdown.get_item_text(index))
-	status_changed.emit()
+	var id: String = _dropdown.get_item_metadata(index)
+	if id == CREATE_NEW_ID:
+		_on_create_pressed()
+	else:
+		WavedashExportPresets.set_active_preset(id)
+		status_changed.emit()
+	_select_active()
 
 ## Matches how Project > Export builds its own Export Path picker.
-func _on_create_default_pressed() -> void:
+func _on_create_pressed() -> void:
 	var root_dir := ProjectSettings.globalize_path("res://")
 	var suggested := WavedashExportPresets.globalize_export_path(WavedashExportPresets.suggested_export_path())
 	var start_dir := suggested.get_base_dir()
