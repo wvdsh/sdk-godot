@@ -98,6 +98,14 @@ static func suggested_export_path() -> String:
 static func localize_export_path(global_path: String) -> String:
 	return ProjectSettings.localize_path(global_path).trim_prefix("res://")
 
+static func export_dir(export_path: String) -> String:
+	return globalize_export_path(export_path.get_base_dir()).simplify_path().trim_suffix("/")
+
+static func export_dir_contains_project(export_path: String) -> bool:
+	var dir := export_dir(export_path)
+	var project_dir := ProjectSettings.globalize_path("res://").simplify_path().trim_suffix("/")
+	return project_dir == dir or project_dir.begins_with(dir + "/")
+
 ## globalize_path() alone won't do: it returns a project-relative path unchanged, and
 ## "res://".path_join() would corrupt an absolute one.
 static func globalize_export_path(export_path: String) -> String:

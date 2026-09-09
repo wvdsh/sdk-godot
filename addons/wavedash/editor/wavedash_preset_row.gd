@@ -13,7 +13,7 @@ const WavedashCompat = preload("wavedash_compat.gd")
 
 ## Long enough to cover EditorExport's own 0.8s save timer.
 const EXPORT_PRESETS_SAVE_DELAY := 1.0
-const ROOT_EXPORT_PATH_REJECTED := "\"%s\" would export to the project root. Choose or create a folder for the build -- Wavedash uploads whichever folder the export lands in."
+const ROOT_EXPORT_PATH_REJECTED := "Exporting into \"%s\" would cause Wavedash to upload your whole project."
 
 const CREATE_NEW_ID := "__create_new__"
 
@@ -138,7 +138,7 @@ func _on_create_pressed() -> void:
 ## A full reload is also the only way to register a preset from scripting.
 func _confirm_create(global_path: String) -> void:
 	var export_path := WavedashExportPresets.localize_export_path(global_path)
-	if export_path.get_base_dir() == "":
+	if WavedashExportPresets.export_dir_contains_project(export_path):
 		_reject_root_export_path(export_path)
 		return
 	var dialog := ConfirmationDialog.new()
@@ -156,5 +156,8 @@ func _confirm_create(global_path: String) -> void:
 func _reject_root_export_path(export_path: String) -> void:
 	var dialog := AcceptDialog.new()
 	dialog.title = "Choose a Build Folder"
-	dialog.dialog_text = ROOT_EXPORT_PATH_REJECTED % export_path
+	dialog.dialog_text = ROOT_EXPORT_PATH_REJECTED % WavedashExportPresets.export_dir(export_path)
+	dialog.get_ok_button().text = "Choose Another Path"
+	dialog.add_cancel_button("Cancel")
+	dialog.confirmed.connect(_on_create_pressed)
 	WavedashDialogs.show_dialog(dialog)

@@ -64,8 +64,7 @@ static func game_not_found() -> Blocker:
 		"wavedash.toml's game_id doesn't match any game this account can see -- it may have been deleted, or belong to a team you're no longer a member of. Reconnect from the Wavedash Project row.")
 
 const NO_EXPORT_PATH := "This preset has no export path set. Open Project > Export and set one inside a folder (for example build/game.html) before building."
-## Takes the offending path twice: as-is, then as the suggested subfolder.
-const EXPORT_PATH_IS_ROOT := "This preset exports to the project root (\"%s\"). Set an export path inside a folder (for example build/%s) before building, or Wavedash would upload your whole project."
+const EXPORT_PATH_IS_ROOT := "Preset exports into \"%s\", which would cause Wavedash to upload your whole project."
 const EXPORT_DIR_MISSING := "This preset's export folder (\"%s\") doesn't exist. Create it, or set a different export path in Project > Export, before building."
 
 ## What every Wavedash action needs, including connecting a game.
@@ -115,8 +114,8 @@ static func check_export_path() -> String:
 	var export_path := WavedashExportPresets.get_active_preset_export_path()
 	if export_path == "":
 		return NO_EXPORT_PATH
-	if export_path.get_base_dir() == "":
-		return EXPORT_PATH_IS_ROOT % [export_path, export_path]
+	if WavedashExportPresets.export_dir_contains_project(export_path):
+		return EXPORT_PATH_IS_ROOT % WavedashExportPresets.export_dir(export_path)
 	# Godot's exporter refuses a missing folder rather than creating one.
 	var export_dir := WavedashExportPresets.derive_upload_dir()
 	if not DirAccess.dir_exists_absolute(WavedashExportPresets.globalize_export_path(export_dir)):
