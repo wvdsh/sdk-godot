@@ -127,6 +127,7 @@ visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 clip_text = true
+fit_to_longest_item = false
 
 [node name="CreateButton" type="Button" parent="VBoxContainer/PresetRow/Controls" unique_id=1825759618]
 visible = false
