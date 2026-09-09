@@ -63,11 +63,19 @@ static func get_available_presets() -> Array[String]:
 ## Raw and unresolved, which is what makes it usable for validation: a bare
 ## filename here means the build lands in the project root.
 static func get_active_preset_export_path() -> String:
+	return _get_active_preset_value("", "export_path", "")
+
+static func get_active_preset_option(option: String, default_value: Variant) -> Variant:
+	return _get_active_preset_value(".options", option, default_value)
+
+static func _get_active_preset_value(subsection: String, key: String, default_value: Variant) -> Variant:
 	var config := _load_config()
 	if config == null:
-		return ""
+		return default_value
 	var section := _find_active_preset_section(config)
-	return config.get_value(section, "export_path", "") if section != "" else ""
+	if section == "":
+		return default_value
+	return config.get_value(section + subsection, key, default_value)
 
 static func get_active_preset() -> String:
 	var available := get_available_presets()
