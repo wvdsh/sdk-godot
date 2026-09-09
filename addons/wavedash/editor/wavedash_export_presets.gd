@@ -6,6 +6,7 @@ extends RefCounted
 ## there's no bespoke storage to keep in sync.
 
 const WavedashCompat = preload("wavedash_compat.gd")
+const WavedashGdextensions = preload("wavedash_gdextensions.gd")
 const EXPORT_PRESETS_PATH := "res://export_presets.cfg"
 const ACTIVE_PRESET_SETTING := "wavedash/active_export_preset"
 
@@ -135,6 +136,8 @@ static func create_default_web_preset(export_path: String) -> String:
 	config.set_value(section, "exclude_filter", "")
 	# The one option whose Godot default (false) is wrong for Wavedash.
 	config.set_value(section + ".options", "variant/thread_support", true)
+	if not WavedashGdextensions.with_web_build().is_empty():
+		config.set_value(section + ".options", "variant/extensions_support", true)
 
 	config.save(EXPORT_PRESETS_PATH)
 

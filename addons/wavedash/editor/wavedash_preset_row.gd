@@ -10,6 +10,7 @@ const WavedashIconTheme = preload("wavedash_icon_theme.gd")
 const PresetIcon = preload("assets/package_white.svg")
 const CreateIcon = preload("assets/package_plus_white.svg")
 const WavedashCompat = preload("wavedash_compat.gd")
+const WavedashGdextensions = preload("wavedash_gdextensions.gd")
 
 ## Long enough to cover EditorExport's own 0.8s save timer.
 const EXPORT_PRESETS_SAVE_DELAY := 1.0
@@ -144,6 +145,7 @@ func _confirm_create(global_path: String) -> void:
 	var dialog := ConfirmationDialog.new()
 	dialog.title = "Create Wavedash Export?"
 	dialog.dialog_text = "Creates a Wavedash export preset that exports to \"%s\", and reloads the project so Godot picks it up. Unsaved changes will be saved first." % export_path
+	dialog.dialog_text += _gdextension_note()
 	dialog.get_ok_button().text = "Create and Reload"
 	dialog.confirmed.connect(func() -> void:
 		var preset_name := WavedashExportPresets.create_default_web_preset(export_path)
@@ -151,6 +153,16 @@ func _confirm_create(global_path: String) -> void:
 		WavedashCompat.restart_editor(true)
 	)
 	WavedashDialogs.show_dialog(dialog)
+
+func _gdextension_note() -> String:
+	var note := ""
+	var web := WavedashGdextensions.with_web_build()
+	if not web.is_empty():
+		note += "\n\nExtensions Support will be on for: %s" % ", ".join(web)
+	var warning := WavedashGdextensions.no_web_build_warning()
+	if warning != "":
+		note += "\n\n" + warning
+	return note
 
 ## WavedashGate refuses this too, but only after the reload this flow would have spent.
 func _reject_root_export_path(export_path: String) -> void:
