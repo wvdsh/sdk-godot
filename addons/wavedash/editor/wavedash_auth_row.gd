@@ -39,15 +39,19 @@ func _refresh_status() -> void:
 	# Sign-in state decides which teams and games are visible at all, so the
 	# cached answers can't outlive a change here.
 	WavedashProjectApi.invalidate()
+	WavedashAuth.invalidate_identity()
 	var result := WavedashAuth.check_status()
 	_authenticated = result.authenticated
 	_logout_button.visible = result.authenticated
 	if result.authenticated:
-		# Email moves to the tooltip: the row is narrow and clips, and the key
-		# preview is the more useful of the two at a glance.
-		# "with key" so the preview doesn't read as a username.
-		_status_label.text = ("Signed in with key %s" % result.key_preview) if result.key_preview != "" else "Signed in"
-		_status_label.tooltip_text = ("Signed in as %s" % result.email) if result.email != "" else ""
+		var identity := WavedashAuth.fetch_identity()
+		var username: String = identity.get("username", "")
+		if username != "":
+			_status_label.text = "Signed in as %s" % username
+			_status_label.tooltip_text = "%s\nKey %s" % [identity.get("email", ""), result.key_preview]
+		else:
+			_status_label.text = ("Signed in with key %s" % result.key_preview) if result.key_preview != "" else "Signed in"
+			_status_label.tooltip_text = ""
 		_action_button.text = "Recheck"
 	else:
 		_status_label.text = "Not signed in"

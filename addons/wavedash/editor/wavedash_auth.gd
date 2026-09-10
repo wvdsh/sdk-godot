@@ -6,8 +6,11 @@ extends RefCounted
 ## or a `--token` flag, and `auth status` makes no server call anyway.
 
 const WavedashCompat = preload("wavedash_compat.gd")
+const WavedashCliRunner = preload("wavedash_cli_runner.gd")
 
 const DEV_PORTAL_KEYS_URL := "https://wavedash.com/dev-portal/keys"
+
+const IDENTITY_KEY := "auth_identity"
 
 ## Enough of the key to recognise which one it is, matching the shape the CLI's
 ## own `auth status` prints: wd_000000...zzz
@@ -25,14 +28,25 @@ static func get_credentials_path() -> String:
 static func check_status() -> Dictionary:
 	var env_token := OS.get_environment("WAVEDASH_TOKEN")
 	if env_token != "":
-		return {"authenticated": true, "email": "", "key_preview": mask_key(env_token)}
-	var creds := _read_credentials_file()
-	var api_key: String = creds.get("api_key", "")
-	return {
-		"authenticated": api_key != "",
-		"email": creds.get("email", ""),
-		"key_preview": mask_key(api_key),
-	}
+		return {"authenticated": true, "key_preview": mask_key(env_token)}
+	var api_key: String = _read_credentials_file().get("api_key", "")
+	return {"authenticated": api_key != "", "key_preview": mask_key(api_key)}
+
+## Who the key belongs to, as `auth status --json` reports it after asking the server:
+## {source, username, email}. Empty when there's no CLI, the CLI predates the
+## flag, the key is rejected, or the server can't be reached, and the caller falls back
+## to the key preview. Held for the session since it's a network round trip.
+static func fetch_identity() -> Dictionary:
+	var cached = WavedashCompat.session_get(IDENTITY_KEY, null)
+	if cached != null:
+		return cached
+	var result := WavedashCliRunner.run_json(["auth", "status", "--json"])
+	var identity: Dictionary = result.data if result.ok and result.data is Dictionary else {}
+	WavedashCompat.session_set(IDENTITY_KEY, identity)
+	return identity
+
+static func invalidate_identity() -> void:
+	WavedashCompat.session_set(IDENTITY_KEY, null)
 
 ## "" for input too short to mask. Real keys never are (wd_ + 64 hex) -- this is
 ## for a truncated paste or a placeholder WAVEDASH_TOKEN, where the head and tail
