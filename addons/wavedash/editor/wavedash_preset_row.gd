@@ -144,7 +144,7 @@ func _confirm_create(global_path: String) -> void:
 		return
 	var dialog := ConfirmationDialog.new()
 	dialog.title = "Create Wavedash Export?"
-	dialog.dialog_text = "Creates a Wavedash export preset that exports to \"%s\", and reloads the project so Godot picks it up. Unsaved changes will be saved first." % export_path
+	dialog.dialog_text = "Creates a Web export preset for \"%s\". The project is saved and reloaded so Godot picks it up." % export_path
 	dialog.dialog_text += _gdextension_note()
 	dialog.get_ok_button().text = "Create and Reload"
 	dialog.confirmed.connect(func() -> void:

@@ -65,7 +65,7 @@ func _recheck_and_hide_if_installed() -> bool:
 func _open_install_dialog() -> void:
 	var dialog := ConfirmationDialog.new()
 	dialog.title = INSTALL_DIALOG_TITLE
-	dialog.dialog_text = "The Wavedash CLI is needed for certain functions of the Wavedash Plugin.\n\nInstalling will run the following command:\n\n%s\n\nContinue?" % WavedashCli.get_install_command_display_string()
+	dialog.dialog_text = "Install the Wavedash CLI by running:\n\n%s" % WavedashCli.get_install_command_display_string()
 	dialog.get_ok_button().text = "Install Now"
 	dialog.add_button("Open Installation Docs Instead", false, "open_docs")
 	dialog.custom_action.connect(func(action: StringName) -> void:

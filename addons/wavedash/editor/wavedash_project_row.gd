@@ -55,7 +55,7 @@ func refresh() -> void:
 	if project == null:
 		# Detail goes in the tooltip; the dock row has to stay narrow.
 		_status_label.text = "Game not found"
-		_status_label.tooltip_text = "wavedash.toml's game_id doesn't match any team/project this account can see -- it may have been deleted, or belongs to a team you're no longer a member of."
+		_status_label.tooltip_text = "The game in wavedash.toml isn't visible to this account."
 	else:
 		_status_label.text = "Game: %s" % project.title
 		_status_label.tooltip_text = ""

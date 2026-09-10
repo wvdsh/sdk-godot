@@ -21,7 +21,7 @@ func _enter_tree() -> void:
 		add_autoload_singleton(SDK_AUTOLOAD_NAME, sdk_path)
 
 	if not WavedashCompat.supports_dock():
-		push_warning("Wavedash: the dock needs Godot %s or newer, but this is %s. The SDK autoload is set up and works on any version." % [
+		push_warning("Wavedash dock needs Godot %s or newer, this is %s. The SDK autoload still works." % [
 			WavedashCompat.dock_min_version_string(), Engine.get_version_info().string])
 		return
 

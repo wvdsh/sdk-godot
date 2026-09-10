@@ -14,7 +14,7 @@ signal log_line(text: String)
 
 var _sequence: WavedashStepSequence
 
-const IDLE_TOOLTIP := "Run the project in your browser with a local Wavedash server with all SDK features"
+const IDLE_TOOLTIP := "Run in the browser against a local Wavedash server"
 
 ## Setup here would dirty the open scene and bake session state into a shipped .tscn.
 @onready var _in_edited_scene := WavedashCompat.is_part_of_edited_scene(self)

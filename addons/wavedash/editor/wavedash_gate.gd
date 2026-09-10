@@ -51,21 +51,21 @@ static func no_preset() -> Blocker:
 static func no_game() -> Blocker:
 	return Blocker.make(
 		"Connect a game on Wavedash first.",
-		"Not connected to a game on Wavedash -- use the Wavedash Project row in the dock first.")
+		"Not connected to a Wavedash game. Connect from the Wavedash dock.")
 
 static func no_export_templates() -> Blocker:
 	return Blocker.make(
 		"Install export templates: Editor > Manage Export Templates.",
-		"Godot's Web export templates aren't installed for this editor version. Install them with Editor > Manage Export Templates > Download and Install, then try again.")
+		"Web export templates aren't installed. Install them under Editor > Manage Export Templates.")
 
 static func game_not_found() -> Blocker:
 	return Blocker.make(
 		"Wavedash game not found.",
-		"wavedash.toml's game_id doesn't match any game this account can see -- it may have been deleted, or belong to a team you're no longer a member of. Reconnect from the Wavedash Project row.")
+		"The game in wavedash.toml isn't visible to this account. Reconnect from the Wavedash dock.")
 
-const NO_EXPORT_PATH := "This preset has no export path set. Open Project > Export and set one inside a folder (for example build/game.html) before building."
+const NO_EXPORT_PATH := "Preset has no export path. Set one in Export Presets."
 const EXPORT_PATH_IS_ROOT := "Preset exports into \"%s\", which would cause Wavedash to upload your whole project."
-const EXPORT_DIR_MISSING := "This preset's export folder (\"%s\") doesn't exist. Create it, or set a different export path in Project > Export, before building."
+const EXPORT_DIR_MISSING := "Export folder \"%s\" doesn't exist."
 
 ## What every Wavedash action needs, including connecting a game.
 static func check_common() -> Blocker:
