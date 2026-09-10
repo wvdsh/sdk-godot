@@ -1,7 +1,7 @@
 @tool
 extends HBoxContainer
 
-## "Export preset: <dropdown>" row. Whether the chosen preset can actually build is
+## "Export preset: <dropdown> [cog]" row. Whether the chosen preset can actually build is
 ## reported by WavedashBuildUploadRow, not here.
 
 const WavedashExportPresets = preload("wavedash_export_presets.gd")
@@ -23,16 +23,20 @@ signal status_changed
 ## Setup here would dirty the open scene and bake session state into a shipped .tscn.
 @onready var _in_edited_scene := WavedashCompat.is_part_of_edited_scene(self)
 
-@onready var _dropdown: OptionButton = $Dropdown
-@onready var _create_button: Button = $CreateButton
+@onready var _dropdown: OptionButton = $Controls/Dropdown
+@onready var _create_button: Button = $Controls/CreateButton
+@onready var _edit_button: Button = $Controls/EditButton
 
 func _ready() -> void:
 	if _in_edited_scene:
 		return
 	_dropdown.item_selected.connect(_on_preset_selected)
 	_create_button.pressed.connect(_on_create_pressed)
+	_edit_button.pressed.connect(_open_export_dialog)
 	visibility_changed.connect(_refresh)
 	WavedashIconTheme.apply_to_button(_create_button)
+	WavedashIconTheme.apply_to_button(_edit_button)
+	_dropdown.resized.connect(_square_edit_button)
 	_refresh()
 	_connect_export_dialog_refresh()
 
@@ -41,6 +45,7 @@ func _notification(what: int) -> void:
 		return
 	if what == NOTIFICATION_THEME_CHANGED and _create_button:
 		WavedashIconTheme.apply_to_button(_create_button)
+		WavedashIconTheme.apply_to_button(_edit_button)
 		WavedashIconTheme.apply_to_dropdown(_dropdown)
 
 ## There's no signal for "export presets changed", and EditorExport isn't exposed
@@ -97,6 +102,16 @@ func _on_preset_selected(index: int) -> void:
 		WavedashExportPresets.set_active_preset(id)
 		status_changed.emit()
 	_select_active()
+
+## The row is as tall as the dropdown's text line, and the icon alone is shorter than that.
+func _square_edit_button() -> void:
+	_edit_button.custom_minimum_size.x = _dropdown.size.y
+
+## Popping the ProjectExportDialog node directly shows an empty preset list; only Godot's
+## own menu handler fills it.
+func _open_export_dialog() -> void:
+	if not WavedashCompat.activate_editor_menu_item("Export..."):
+		log_line.emit("Couldn't find Project > Export in the editor menu.")
 
 ## Matches how Project > Export builds its own Export Path picker.
 func _on_create_pressed() -> void:

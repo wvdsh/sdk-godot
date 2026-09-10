@@ -11,6 +11,7 @@
 [ext_resource type="Texture2D" path="res://addons/wavedash/editor/assets/wrench_white.svg" id="7_4nw3a"]
 [ext_resource type="Texture2D" path="res://addons/wavedash/editor/assets/cloud_upload_white.svg" id="7_y4u7f"]
 [ext_resource type="Texture2D" path="res://addons/wavedash/editor/assets/package_plus_white.svg" id="8_crtpr"]
+[ext_resource type="Texture2D" path="res://addons/wavedash/editor/assets/settings_white.svg" id="9_cog"]
 
 [node name="WavedashEditor" type="MarginContainer" unique_id=2001152905]
 anchors_preset = 15
@@ -116,19 +117,29 @@ size_flags_horizontal = 3
 text = "Export preset:"
 clip_text = true
 
-[node name="Dropdown" type="OptionButton" parent="VBoxContainer/PresetRow" unique_id=864338044]
+[node name="Controls" type="HBoxContainer" parent="VBoxContainer/PresetRow" unique_id=1573942816]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Dropdown" type="OptionButton" parent="VBoxContainer/PresetRow/Controls" unique_id=864338044]
 visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 clip_text = true
 
-[node name="CreateButton" type="Button" parent="VBoxContainer/PresetRow" unique_id=1825759618]
+[node name="CreateButton" type="Button" parent="VBoxContainer/PresetRow/Controls" unique_id=1825759618]
 visible = false
 layout_mode = 2
 size_flags_horizontal = 3
 text = "Create..."
 icon = ExtResource("8_crtpr")
 clip_text = true
+
+[node name="EditButton" type="Button" parent="VBoxContainer/PresetRow/Controls" unique_id=1398210475]
+layout_mode = 2
+tooltip_text = "Export Presets"
+icon = ExtResource("9_cog")
 
 [node name="BuildUploadRow" type="VBoxContainer" parent="VBoxContainer" unique_id=1545626711]
 unique_name_in_owner = true

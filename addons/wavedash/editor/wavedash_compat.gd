@@ -73,6 +73,23 @@ static func editor_scale() -> float:
 static func editor_base_control() -> Node:
 	return _editor_interface().call("get_base_control") as Node
 
+## 4.4 added translation domains; the editor's own strings live in "godot.editor".
+static func _editor_translate(text: String) -> String:
+	var domain: Object = TranslationServer.call("get_or_add_domain", "godot.editor")
+	return str(domain.call("translate", text))
+
+## Matched by label: the menu's ids and shortcuts aren't reachable from scripting.
+static func activate_editor_menu_item(english_label: String) -> bool:
+	var labels := [_editor_translate(english_label), english_label]
+	for menu_bar in editor_base_control().find_children("*", "MenuBar", true, false):
+		for i in menu_bar.get_menu_count():
+			var popup: PopupMenu = menu_bar.get_menu_popup(i)
+			for j in popup.item_count:
+				if not popup.is_item_separator(j) and popup.get_item_text(j) in labels:
+					popup.id_pressed.emit(popup.get_item_id(j))
+					return true
+	return false
+
 static func restart_editor(save: bool) -> void:
 	_editor_interface().call("restart_editor", save)
 
