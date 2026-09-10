@@ -1,18 +1,11 @@
 @tool
 extends RefCounted
 
-## The one way to invoke the CLI: run()/run_json() wait for an answer,
-## start_streaming() hands back a live process instead.
-##
-## Both retry once with a re-resolved path. resolve_executable() already drops a
-## cached path whose file is gone, so this covers the case it cannot see: present but
-## unspawnable. Re-resolving revalidates candidates with --version, skipping it.
+## Both retry once with a re-resolved path, for a cached path that exists but no longer spawns.
 
 const WavedashCli = preload("wavedash_cli.gd")
 const WavedashOSProcess = preload("wavedash_os_process.gd")
 
-## `ok` only when the executable was found and exited 0; the other flags separate
-## that from a real command failure.
 class Result:
 	var ok := false
 	var cli_missing := false
@@ -26,7 +19,6 @@ class JsonResult extends Result:
 const NOT_FOUND_EXIT_CODE := -1
 const SPAWN_ATTEMPTS := 2
 
-## `host` parents the process. Null when nothing could be started.
 static func start_streaming(host: Node, args: PackedStringArray) -> WavedashOSProcess:
 	if not Engine.is_editor_hint():
 		push_error(WavedashCli.BLOCKED_MESSAGE)
@@ -48,22 +40,17 @@ static func run(args: PackedStringArray) -> Result:
 	_execute(args, result)
 	return result
 
-## Same as run(), but parses `output` as JSON on success.
 static func run_json(args: PackedStringArray) -> JsonResult:
 	var result := JsonResult.new()
 	_execute(args, result)
 	if result.ok:
-		# Not JSON.parse_string(): it prints an engine error on bad input, and a
-		# CLI that returned prose instead of JSON is a normal outcome here.
+		# Not JSON.parse_string(): it prints an engine error on bad input, and prose instead of JSON is normal here.
 		var json := JSON.new()
 		if json.parse(_json_body(result.output)) == OK:
 			result.data = json.data
 	return result
 
-## stderr is captured alongside stdout, so the CLI's notices land in the text
-## being parsed -- "Update available: ... Run: wavedash update" most notably,
-## intermittently and on either side of the JSON. Hence the span from the first
-## opening delimiter to the last matching closer.
+## stderr is captured alongside stdout, so CLI notices such as "Update available" land on either side of the JSON.
 static func _json_body(output: String) -> String:
 	var open_at := -1
 	var closer := ""
@@ -77,8 +64,6 @@ static func _json_body(output: String) -> String:
 	var close_at := output.rfind(closer)
 	return output.substr(open_at, close_at - open_at + 1) if close_at > open_at else output.substr(open_at)
 
-## Fills in whichever result type it's handed, so callers don't copy fields
-## between two of them.
 static func _execute(args: PackedStringArray, result: Result) -> void:
 	if not Engine.is_editor_hint():
 		result.blocked_outside_editor = true

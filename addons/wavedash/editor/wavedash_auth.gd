@@ -1,9 +1,7 @@
 @tool
 extends RefCounted
 
-## Reads and writes the CLI's own `~/.wavedash/credentials.json` directly, which
-## is why signing in needs no CLI installed: `auth login` only does browser OAuth
-## or a `--token` flag, and `auth status` makes no server call anyway.
+## Reads and writes the CLI's own credentials.json, so signing in needs no CLI installed.
 
 const WavedashCompat = preload("wavedash_compat.gd")
 const WavedashCliRunner = preload("wavedash_cli_runner.gd")
@@ -12,19 +10,15 @@ const DEV_PORTAL_KEYS_URL := "https://wavedash.com/dev-portal/keys"
 
 const IDENTITY_KEY := "auth_identity"
 
-## Enough of the key to recognise which one it is, matching the shape the CLI's
-## own `auth status` prints: wd_000000...zzz
 const KEY_PREVIEW_HEAD := 9
 const KEY_PREVIEW_TAIL := 3
-## Below this, masking would reveal most of the key, so no preview is offered.
 const KEY_PREVIEW_MIN_HIDDEN := 8
 
 static func get_credentials_path() -> String:
 	var home := OS.get_environment("USERPROFILE") if OS.get_name() == "Windows" else OS.get_environment("HOME")
 	return home.path_join(".wavedash").path_join("credentials.json")
 
-## WAVEDASH_TOKEN takes precedence over the file, matching the CLI. Returns only a
-## masked `key_preview`, so the key itself stays inside this file.
+## WAVEDASH_TOKEN takes precedence over the file, matching the CLI.
 static func check_status() -> Dictionary:
 	var env_token := OS.get_environment("WAVEDASH_TOKEN")
 	if env_token != "":
@@ -32,10 +26,9 @@ static func check_status() -> Dictionary:
 	var api_key: String = _read_credentials_file().get("api_key", "")
 	return {"authenticated": api_key != "", "key_preview": mask_key(api_key)}
 
-## Who the key belongs to, as `auth status --json` reports it after asking the server:
-## {source, username, email}. Empty when there's no CLI, the CLI predates the
-## flag, the key is rejected, or the server can't be reached, and the caller falls back
-## to the key preview. Held for the session since it's a network round trip.
+## From `auth status --json`: {source, username, email}. Empty without a CLI that has the flag, or when
+## the key is rejected or the server unreachable; callers fall back to the key preview. Held for the
+## session since it's a network round trip.
 static func fetch_identity() -> Dictionary:
 	var cached = WavedashCompat.session_get(IDENTITY_KEY, null)
 	if cached != null:
@@ -48,9 +41,7 @@ static func fetch_identity() -> Dictionary:
 static func invalidate_identity() -> void:
 	WavedashCompat.session_set(IDENTITY_KEY, null)
 
-## "" for input too short to mask. Real keys never are (wd_ + 64 hex) -- this is
-## for a truncated paste or a placeholder WAVEDASH_TOKEN, where the head and tail
-## would overlap and echo the value back ("wd_tiny...iny").
+## "" for input too short to mask, where head and tail would overlap and echo the value back.
 static func mask_key(key: String) -> String:
 	if key.length() < KEY_PREVIEW_HEAD + KEY_PREVIEW_TAIL + KEY_PREVIEW_MIN_HIDDEN:
 		return ""
@@ -68,9 +59,7 @@ static func _read_credentials_file() -> Dictionary:
 	var parsed: Variant = JSON.parse_string(content)
 	return parsed if parsed is Dictionary else {}
 
-## Read-modify-write, so signing in doesn't destroy the CLI's other fields (the
-## email this addon displays, most visibly). The read must precede the open,
-## which truncates.
+## Read-modify-write so the CLI's other fields survive; the read must precede the open, which truncates.
 static func save_token(token: String) -> Error:
 	var path := get_credentials_path()
 	var dir_path := path.get_base_dir()
@@ -84,13 +73,11 @@ static func save_token(token: String) -> Error:
 		return FileAccess.get_open_error()
 	file.store_string(JSON.stringify(credentials))
 	file.close()
-	# Best-effort parity with the CLI's own restrictive permissions.
 	WavedashCompat.set_owner_only_permissions(dir_path, true)
 	WavedashCompat.set_owner_only_permissions(path, false)
 	return OK
 
-## Idempotent. Doesn't touch WAVEDASH_TOKEN, which would keep authenticating
-## regardless and isn't this plugin's to unset.
+## Doesn't touch WAVEDASH_TOKEN, which isn't this plugin's to unset.
 static func log_out() -> Error:
 	var path := get_credentials_path()
 	if not FileAccess.file_exists(path):

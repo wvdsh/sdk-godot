@@ -1,9 +1,6 @@
 @tool
 extends Node
 
-## Runs a command without blocking, polling from _process and emitting output line by line
-## so the editor doesn't freeze.
-
 signal output_line(text: String)
 signal finished(exit_code: int)
 
@@ -16,8 +13,6 @@ var _stderr: FileAccess
 var _pid: int = NO_PID
 var _done: bool = false
 
-## The path the running process was actually started from, which after a retry is
-## not necessarily the one the caller first resolved.
 var executable_path := ""
 
 func start(path: String, arguments: PackedStringArray) -> bool:
@@ -44,7 +39,7 @@ func _process(_delta: float) -> void:
 	if _done or _pid == NO_PID:
 		return
 	if not OS.is_process_running(_pid):
-		# One more drain -- output written just before exit may still be buffered.
+		# Output written just before exit may still be buffered.
 		_drain(_stdio)
 		_drain(_stderr)
 		_done = true

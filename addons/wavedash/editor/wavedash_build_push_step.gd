@@ -1,14 +1,10 @@
 @tool
 extends "wavedash_cli_step.gd"
 
-## `wavedash build push`: uploads the exported build and reports what it created.
-
 const WavedashLog = preload("wavedash_log.gd")
 
 signal succeeded(build_id: String, playtest_url: String)
 
-## Set before run(); the argument list is rebuilt from it each time so it can be
-## checked without launching, which would push a real build.
 var message := ""
 
 var _build_id := ""
@@ -16,8 +12,7 @@ var _playtest_url := ""
 
 var _PROGRESS_REGEX := RegEx.create_from_string("Uploading:\\s*(\\d+)%\\s*(\\(.*\\))?")
 var _BUILD_ID_REGEX := RegEx.create_from_string("^Build ID:\\s*(.+)$")
-## ASCII tail only, never the CLI's leading "▶": the Windows console codepage
-## mangles multi-byte UTF-8 on the way through OS output capture.
+## ASCII tail only, never the CLI's leading "▶": the Windows console codepage mangles multi-byte UTF-8.
 var _PLAY_AT_REGEX := RegEx.create_from_string("Play at:\\s*(.+)$")
 
 func _ready() -> void:
@@ -39,7 +34,6 @@ func build_args() -> PackedStringArray:
 	return built
 
 func _report_finished(exit_code: int) -> void:
-	# The sequence already said it was cancelled; a killed process's -1 isn't a failure.
 	if was_stopped():
 		return
 	if exit_code != 0:

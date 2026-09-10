@@ -1,9 +1,6 @@
 @tool
 extends HBoxContainer
 
-## "Game: <status> [Connect.../Change...]" dock row. Opens WavedashInitWindow to
-## set or change the target game; never edits wavedash.toml itself.
-
 const WavedashAuth = preload("wavedash_auth.gd")
 const WavedashCli = preload("wavedash_cli.gd")
 const WavedashToml = preload("wavedash_toml.gd")
@@ -14,11 +11,8 @@ const WavedashIconTheme = preload("wavedash_icon_theme.gd")
 const WavedashCompat = preload("wavedash_compat.gd")
 
 signal log_line(text: String)
-## Must be emitted on every refresh() path, including the early return:
-## wavedash_editor.gd routes WavedashBuildUploadRow's refresh through it.
 signal status_changed
 
-## Setup here would dirty the open scene and bake session state into a shipped .tscn.
 @onready var _in_edited_scene := WavedashCompat.is_part_of_edited_scene(self)
 
 @onready var _status_label: Label = $StatusLabel
@@ -37,8 +31,8 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and _action_button:
 		WavedashIconTheme.apply_to_button(_action_button)
 
-## Hidden without both a key and a CLI, since resolving the game name shells out
-## and a failed call would report "Game not found" for a perfectly fine game.
+## Hidden without both a key and a CLI: resolving the game name shells out, and a failed call would
+## read as "Game not found" for a perfectly fine game.
 func refresh() -> void:
 	if not WavedashAuth.check_status().authenticated or not WavedashCli.is_installed():
 		visible = false
@@ -53,7 +47,6 @@ func refresh() -> void:
 		return
 	var project := WavedashProjectApi.find_project(toml.game_id)
 	if project == null:
-		# Detail goes in the tooltip; the dock row has to stay narrow.
 		_status_label.text = "Game not found"
 		_status_label.tooltip_text = "The game in wavedash.toml isn't visible to this account."
 	else:

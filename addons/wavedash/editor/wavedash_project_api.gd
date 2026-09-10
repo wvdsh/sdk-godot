@@ -1,13 +1,8 @@
 @tool
 extends RefCounted
 
-## Team/project (organization/game) API surface, built on WavedashCliRunner.
-## `list` and `create` are the only subcommands that exist.
-
 const WavedashCompat = preload("wavedash_compat.gd")
 const WavedashCliRunner = preload("wavedash_cli_runner.gd")
-## Typed form of a `wavedash team list --json` entry, which carries exactly these
-## three fields.
 class Team:
 	var id := ""
 	var name := ""
@@ -20,8 +15,7 @@ class Team:
 		team.slug = d.get("slug", "")
 		return team
 
-## `team_id` is not in the project JSON at all -- it is implicit in which team was
-## queried, so from_dict() takes it separately.
+## team_id isn't in the project JSON; it's implicit in which team was queried.
 class Project:
 	var id := ""
 	var title := ""
@@ -36,11 +30,8 @@ class Project:
 		project.team_id = team_id
 		return project
 
-
-## Every list call is a blocking CLI subprocess and find_project() costs 1+N of
-## them, so results are held for the session. invalidate() is called wherever the
-## answer can change: sign-in state, and creating a team or game.
-## Absent rather than empty when uncached, so a genuine "no teams" answer is still a hit.
+## Every list call is a blocking CLI subprocess and find_project() costs 1+N of them, so results are
+## held for the session. Absent rather than empty when uncached, so a genuine "no teams" is still a hit.
 const TEAMS_KEY := "project_api_teams"
 const PROJECTS_KEY := "project_api_projects"
 
@@ -54,7 +45,6 @@ static func list_teams() -> Array[Team]:
 		return _teams_from(cached)
 	var result := WavedashCliRunner.run_json(["team", "list", "--json"])
 	if not result.ok or not (result.data is Array):
-		# Failures aren't cached -- they're usually transient (no key, no CLI).
 		var none: Array[Team] = []
 		return none
 	var raw := []
@@ -92,9 +82,8 @@ static func _projects_from(raw: Array, team_id: String) -> Array[Project]:
 		projects.append(Project.from_dict(entry, team_id))
 	return projects
 
-## `create` has no --json; success is one line ending "(id: <id>)". Matched on
-## that ASCII tail, never the leading "✓", which the Windows console codepage
-## mangles. `slug` is left blank -- the plain-text output doesn't carry it.
+## `create` has no --json; success is one line ending "(id: <id>)". Matched on that ASCII tail, never
+## the leading "✓", which the Windows console codepage mangles.
 static func create_team(name: String) -> Team:
 	var result := WavedashCliRunner.run(["team", "create", "--name", name])
 	if not result.ok:
@@ -122,8 +111,6 @@ static func create_project(title: String, team_id: String) -> Project:
 	invalidate()
 	return project
 
-## Searches team by team, since no "get game by id" command exists. Both entries
-## are null when the game was deleted or belongs to a team this account can't see.
 static func find_project_with_team(game_id: String) -> Dictionary:
 	if game_id != "":
 		for team in list_teams():

@@ -1,8 +1,6 @@
 @tool
 extends "wavedash_process_step.gd"
 
-## Exports the active preset by re-invoking Godot headlessly.
-
 const WavedashExportPresets = preload("wavedash_export_presets.gd")
 const WavedashToml = preload("wavedash_toml.gd")
 const WavedashGate = preload("wavedash_gate.gd")
@@ -16,8 +14,7 @@ const LIBRARY_LOCKED_NOTE := "The editor holds that extension's library open, so
 
 const EXTENSIONS_OFF_WARNING := "Preset '%s' has Extensions Support off, so these Web GDExtensions won't load in the browser. Enable it in Export Presets: %s"
 
-## Godot colourises the task id in its progress lines, so they must be stripped
-## before matching.
+## Godot colourises the task id in its progress lines, so they're stripped before matching.
 var _ANSI_REGEX := RegEx.create_from_string("\u001b\\[[0-9;]*m")
 var _PROGRESS_REGEX := RegEx.create_from_string("^\\[\\s*(\\d+)%\\s*\\]\\s*\\S+\\s*\\|\\s*(.+)$")
 
@@ -38,8 +35,6 @@ func _args() -> PackedStringArray:
 		"--export-release", WavedashExportPresets.get_active_preset(),
 	])
 
-## Both flows reach an export only through here, so this is what actually blocks a
-## dev run and an upload; the dock's hidden buttons are affordances on top of it.
 func _spawn() -> WavedashOSProcess:
 	var gate := WavedashGate.check_can_build().detailed_description
 	if gate != "":
@@ -73,9 +68,7 @@ func _warn_about_gdextensions() -> void:
 		output_line.emit(text)
 		WavedashLog.warning(text)
 
-## upload_dir is derived from the preset, so a mismatch is a stale value rather than
-## a preference to respect. Both commands read it -- `build push` uploads it and
-## `wavedash dev` serves it -- so a stale one silently uses the previous build.
+## Both CLI commands read upload_dir, so a stale value silently uses the previous build.
 func _sync_upload_dir() -> void:
 	var derived := WavedashExportPresets.derive_upload_dir()
 	var toml := WavedashToml.read()
@@ -93,8 +86,7 @@ func _sync_upload_dir() -> void:
 	output_line.emit(updated)
 	WavedashLog.console(updated)
 
-## `description` is Godot's own per-step message, which is what explains a percent
-## resetting: the export runs several phases that each count 0-100.
+## `description` is Godot's per-phase message; the export runs several phases that each count 0-100.
 func _on_line(line: String) -> void:
 	super(line)
 	var stripped := _ANSI_REGEX.sub(line, "", true)

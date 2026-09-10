@@ -1,13 +1,10 @@
 @tool
 extends RefCounted
 
-## Calls the plugin makes dynamically rather than directly, so its scripts still parse on
-## Godot 4.0-4.3: a direct call to a method the running engine lacks is a parse error, not
-## a runtime one. Each wrapper names the version that added what it stands in for -- once
-## the floor passes that version, inline the call and delete the wrapper.
+## Calls made dynamically so the scripts still parse on Godot 4.0-4.3: a direct call to a method the
+## running engine lacks is a parse error, not a runtime one. Each wrapper names the version that added it.
 
-## 4.1 added `static var`, so session state lives on Engine metadata instead. Metadata
-## names must be plain identifiers, so the capital marks where the namespace ends.
+## 4.1 added `static var`, so session state lives on Engine metadata instead.
 const SESSION_PREFIX := "Wavedash_"
 
 ## has_meta() first: get_meta() treats a null default as "no default" and errors.
@@ -15,12 +12,11 @@ static func session_get(key: String, default_value: Variant) -> Variant:
 	var name := SESSION_PREFIX + key
 	return Engine.get_meta(name) if Engine.has_meta(name) else default_value
 
-## Plain data only -- an Array holding script-defined objects segfaults the engine when
-## metadata is released at shutdown. Storing null erases the entry.
+## Plain data only: an Array holding script-defined objects segfaults the engine at shutdown. Null erases.
 static func session_set(key: String, value: Variant) -> void:
 	Engine.set_meta(SESSION_PREFIX + key, value)
 
-## os_execute_with_pipe() below is the only thing in the addon needing 4.4.
+## os_execute_with_pipe() is the only thing in the addon needing 4.4.
 const DOCK_MIN_VERSION := 0x040400
 
 static func supports_dock() -> bool:
@@ -37,9 +33,8 @@ static func os_execute_with_pipe(path: String, arguments: PackedStringArray, blo
 static func os_get_process_exit_code(pid: int) -> int:
 	return int(OS.call("get_process_exit_code", pid))
 
-## 4.1 added FileAccess.set_unix_permissions(). Routed through the ClassDB singleton because
-## a static method on a class can't be dispatched by name, and ClassDB.class_call_static()
-## is itself 4.2+.
+## 4.1 added FileAccess.set_unix_permissions(). Routed through the ClassDB singleton because a static
+## method can't be dispatched by name, and ClassDB.class_call_static() is itself 4.2+.
 static func set_unix_permissions(path: String, permissions: int) -> int:
 	return int(Engine.get_singleton("ClassDB").call(
 		"class_call_static", "FileAccess", "set_unix_permissions", path, permissions))
@@ -54,7 +49,8 @@ static func set_owner_only_permissions(path: String, executable: bool) -> int:
 		bits |= ClassDB.class_get_integer_constant("FileAccess", flag_name)
 	return set_unix_permissions(path, bits)
 
-## 4.3 added Node.is_part_of_edited_scene().
+## 4.3 added Node.is_part_of_edited_scene(). Every row bails out of _ready() when this is true: setup
+## there would dirty the open scene and bake session state into a shipped .tscn.
 static func is_part_of_edited_scene(node: Node) -> bool:
 	return node.call("is_part_of_edited_scene") == true
 
@@ -65,8 +61,7 @@ static func find_index(items: Array, predicate: Callable) -> int:
 			return i
 	return -1
 
-## 4.2 made EditorInterface a static singleton; before that even naming the class here
-## fails to parse.
+## 4.2 made EditorInterface a static singleton; before that even naming the class fails to parse.
 static func editor_scale() -> float:
 	return float(_editor_interface().call("get_editor_scale"))
 

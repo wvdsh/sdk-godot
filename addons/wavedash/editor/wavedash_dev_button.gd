@@ -1,9 +1,6 @@
 @tool
 extends Button
 
-## Main-toolbar "Dev on Wavedash" button: exports the active preset, then runs
-## `wavedash dev` against it, becoming a stop control while a session is running.
-
 const WavedashStepSequence = preload("wavedash_step_sequence.gd")
 const WavedashGate = preload("wavedash_gate.gd")
 const WavedashIcon = preload("assets/wavedash_white.svg")
@@ -16,7 +13,6 @@ var _sequence: WavedashStepSequence
 
 const IDLE_TOOLTIP := "Run in the browser against a local Wavedash server"
 
-## Setup here would dirty the open scene and bake session state into a shipped .tscn.
 @onready var _in_edited_scene := WavedashCompat.is_part_of_edited_scene(self)
 
 func _ready() -> void:
@@ -24,7 +20,7 @@ func _ready() -> void:
 		return
 	icon = WavedashIcon
 	_apply_theme_aware_icon_styling()
-	# On only so button_pressed can render the latched look; not user-toggleable.
+	# Only so button_pressed can render the latched look; not user-toggleable.
 	toggle_mode = true
 	_sequence = WavedashStepSequence.new()
 	add_child(_sequence)
@@ -34,9 +30,7 @@ func _ready() -> void:
 	pressed.connect(_on_pressed)
 	refresh_tooltip()
 
-## Public: the dock re-runs this whenever anything the gate reads changes. Stays
-## clickable when blocked -- the export step reports the reason to the
-## console and the dock log on the attempt, which beats an unexplained dead button.
+## Stays clickable when blocked: the export step reports the reason on the attempt.
 func refresh_tooltip() -> void:
 	if _sequence.is_running():
 		return
@@ -49,8 +43,7 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED:
 		_apply_theme_aware_icon_styling()
 
-## add_theme_*_override() re-triggers NOTIFICATION_THEME_CHANGED on this node,
-## re-entering the styling function.
+## add_theme_*_override() re-triggers NOTIFICATION_THEME_CHANGED on this node.
 var _applying_icon_style := false
 
 func _apply_theme_aware_icon_styling() -> void:
@@ -88,8 +81,7 @@ func _on_pressed() -> void:
 		_sequence.start()
 	_sync_pressed_from_state()
 
-## The only place button_pressed is written. toggle_mode makes Godot flip it on
-## every click, which otherwise leaves it latched when the gate refuses start().
+## toggle_mode flips button_pressed on every click, which would leave it latched when start() is refused.
 func _sync_pressed_from_state() -> void:
 	button_pressed = _sequence.is_running()
 

@@ -1,9 +1,6 @@
 @tool
 extends HBoxContainer
 
-## "Wavedash Account: <status> [Sign In.../Recheck]" dock row. See WavedashAuth
-## for why signing in needs no CLI.
-
 const WavedashAuth = preload("wavedash_auth.gd")
 const WavedashProjectApi = preload("wavedash_project_api.gd")
 const WavedashDialogs = preload("wavedash_dialogs.gd")
@@ -15,17 +12,12 @@ const WavedashCompat = preload("wavedash_compat.gd")
 signal log_line(text: String)
 signal status_changed
 
-## Setup here would dirty the open scene and bake session state into a shipped .tscn.
 @onready var _in_edited_scene := WavedashCompat.is_part_of_edited_scene(self)
 
 @onready var _status_label: Label = $SignInStatus
-## Both live in one expanding container, so together they occupy the width a
-## single button gets in the other rows -- and Sign In fills it alone when Log Out
-## is hidden.
 @onready var _action_button: Button = $Buttons/ActionButton
 @onready var _logout_button: Button = $Buttons/LogoutButton
 
-## What the button should do next, so dispatch doesn't depend on label wording.
 var _authenticated := false
 
 func _ready() -> void:
@@ -36,8 +28,6 @@ func _ready() -> void:
 	_refresh_status()
 
 func _refresh_status() -> void:
-	# Sign-in state decides which teams and games are visible at all, so the
-	# cached answers can't outlive a change here.
 	WavedashProjectApi.invalidate()
 	WavedashAuth.invalidate_identity()
 	var result := WavedashAuth.check_status()
@@ -60,8 +50,6 @@ func _refresh_status() -> void:
 	_apply_icons()
 	status_changed.emit()
 
-## The action button is two actions in one, so its icon follows the same state
-## its label does.
 func _apply_icons() -> void:
 	_action_button.icon = RecheckIcon if _authenticated else SignInIcon
 	WavedashIconTheme.apply_to_button(_action_button)
@@ -73,8 +61,6 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_THEME_CHANGED and _action_button:
 		_apply_icons()
 
-## Recheck only ever updates the display, even if it finds the token gone: the
-## sign-in dialog must open from a deliberate click, never as a side effect.
 func _on_action_pressed() -> void:
 	if _authenticated:
 		_refresh_status()
@@ -88,8 +74,7 @@ func _prompt_sign_in() -> void:
 	dialog.get_ok_button().disabled = true
 	dialog.add_button("Create API Key", false, "open_portal")
 
-	# AcceptDialog assigns every direct Control child the same content rect, so
-	# multiple children overlap instead of stacking. One container child fixes it.
+	# AcceptDialog gives every direct Control child the same rect, so siblings overlap; one container child fixes it.
 	var content_box := VBoxContainer.new()
 	content_box.add_theme_constant_override("separation", 8)
 	dialog.add_child(content_box)

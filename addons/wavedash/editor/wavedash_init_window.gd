@@ -1,9 +1,6 @@
 @tool
 extends AcceptDialog
 
-## Team/game picker that writes wavedash.toml's game_id. Godot version and build
-## folder are derived, never asked for.
-
 const WavedashGate = preload("wavedash_gate.gd")
 const WavedashExportPresets = preload("wavedash_export_presets.gd")
 const WavedashProjectApi = preload("wavedash_project_api.gd")
@@ -37,7 +34,6 @@ var _projects: Array[WavedashProjectApi.Project] = []
 var _selected_team_id := ""
 var _selected_project_id := ""
 
-## Setup here would dirty the open scene and bake session state into a shipped .tscn.
 @onready var _in_edited_scene := WavedashCompat.is_part_of_edited_scene(self)
 
 func _ready() -> void:
@@ -96,7 +92,6 @@ func _show_picker() -> void:
 	_team_create_row.visible = false
 	_game_create_row.visible = false
 
-## Populates only; the right default differs by caller.
 func _populate_team_dropdown() -> void:
 	_team_dropdown.clear()
 	for i in _teams.size():
@@ -139,9 +134,7 @@ func _on_game_selected(index: int) -> void:
 	_selected_project_id = project_id
 	_update_initialize_enabled()
 
-## An OptionButton displays an item without firing item_selected, so a default has
-## to be applied explicitly or it's shown but never acted on. With no real items,
-## the create entry isn't a selection either, so reveal the create row instead.
+## An OptionButton displays an item without firing item_selected, so a default has to be applied explicitly.
 func _select_default(has_real_items: bool, index: int, dropdown: OptionButton, on_selected: Callable, create_row: HBoxContainer, create_edit: LineEdit) -> void:
 	if has_real_items:
 		dropdown.select(index)
@@ -183,8 +176,6 @@ func _on_create_project_pressed() -> void:
 func _update_initialize_enabled() -> void:
 	get_ok_button().disabled = _selected_team_id == "" or _selected_project_id == ""
 
-## Searches team-by-team because no "get game by id" command exists. Returns
-## whether it found a match, so the caller knows if it still needs a default.
 func _preselect_existing(game_id: String) -> bool:
 	var found := WavedashProjectApi.find_project_with_team(game_id)
 	if found.team == null:
@@ -198,8 +189,6 @@ func _preselect_existing(game_id: String) -> bool:
 		return false
 	_selected_team_id = team_id
 	_projects = projects
-	# Selected directly rather than via _select_default(), which would call
-	# _on_team_selected() and re-fetch the project list already in hand.
 	_team_dropdown.select(team_index)
 	_populate_game_dropdown()
 	_apply_game_default(true, project_index)
@@ -213,8 +202,7 @@ func _on_initialize() -> void:
 	toml.godot_version = "%d.%d" % [version_info.major, version_info.minor]
 	var err := toml.write()
 	if err != OK:
-		# The OK button already auto-hid this dialog, so the console is all that's
-		# left to report through.
+		# The OK button already auto-hid this dialog, so the console is all that's left to report through.
 		WavedashLog.error("Failed to write wavedash.toml: %s" % error_string(err))
 		return
 	initialized.emit()

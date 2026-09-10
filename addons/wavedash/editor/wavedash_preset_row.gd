@@ -1,9 +1,6 @@
 @tool
 extends HBoxContainer
 
-## "Export preset: <dropdown> [cog]" row. Whether the chosen preset can actually build is
-## reported by WavedashBuildUploadRow, not here.
-
 const WavedashExportPresets = preload("wavedash_export_presets.gd")
 const WavedashDialogs = preload("wavedash_dialogs.gd")
 const WavedashIconTheme = preload("wavedash_icon_theme.gd")
@@ -21,7 +18,6 @@ const CREATE_NEW_ID := "__create_new__"
 signal log_line(text: String)
 signal status_changed
 
-## Setup here would dirty the open scene and bake session state into a shipped .tscn.
 @onready var _in_edited_scene := WavedashCompat.is_part_of_edited_scene(self)
 
 @onready var _dropdown: OptionButton = $Controls/Dropdown
@@ -49,9 +45,7 @@ func _notification(what: int) -> void:
 		WavedashIconTheme.apply_to_button(_edit_button)
 		WavedashIconTheme.apply_to_dropdown(_dropdown)
 
-## There's no signal for "export presets changed", and EditorExport isn't exposed
-## to scripting. Project > Export's dialog does already exist as a node under
-## base_control, so its visibility_changed stands in for one.
+## There's no signal for "export presets changed"; Project > Export's visibility_changed stands in for one.
 func _connect_export_dialog_refresh() -> void:
 	for child in WavedashCompat.editor_base_control().get_children():
 		if child.get_class() == "ProjectExportDialog":
@@ -59,8 +53,7 @@ func _connect_export_dialog_refresh() -> void:
 			child.visibility_changed.connect(_refresh_once_saved)
 			return
 
-## Godot debounces its export_presets.cfg write, so the refresh on close can land
-## before the file is rewritten.
+## Godot debounces its export_presets.cfg write, so a refresh on close can land before the file is rewritten.
 func _refresh_once_saved() -> void:
 	var before := FileAccess.get_md5(WavedashExportPresets.EXPORT_PRESETS_PATH)
 	await get_tree().create_timer(EXPORT_PRESETS_SAVE_DELAY).timeout
@@ -93,8 +86,6 @@ func _select_active() -> void:
 			_dropdown.select(i)
 			return
 
-## Changing preset changes whether a build is possible, so announce it rather
-## than rebuilding the dropdown from inside its own item_selected handler.
 func _on_preset_selected(index: int) -> void:
 	var id: String = _dropdown.get_item_metadata(index)
 	if id == CREATE_NEW_ID:
@@ -108,13 +99,11 @@ func _on_preset_selected(index: int) -> void:
 func _square_edit_button() -> void:
 	_edit_button.custom_minimum_size.x = _dropdown.size.y
 
-## Popping the ProjectExportDialog node directly shows an empty preset list; only Godot's
-## own menu handler fills it.
+## Popping the ProjectExportDialog node directly shows an empty preset list; only Godot's own menu handler fills it.
 func _open_export_dialog() -> void:
 	if not WavedashCompat.activate_editor_menu_item("Export..."):
 		log_line.emit("Couldn't find Project > Export in the editor menu.")
 
-## Matches how Project > Export builds its own Export Path picker.
 func _on_create_pressed() -> void:
 	var root_dir := ProjectSettings.globalize_path("res://")
 	var suggested := WavedashExportPresets.globalize_export_path(WavedashExportPresets.suggested_export_path())
@@ -133,10 +122,8 @@ func _on_create_pressed() -> void:
 	dialog.file_selected.connect(_confirm_create)
 	WavedashDialogs.show_file_dialog(dialog)
 
-## Creates and reloads in one step, with no deferrable gap: Godot only reads
-## export_presets.cfg at project open, and opening Project > Export while its
-## in-memory list is stale makes it overwrite the file, deleting the new preset.
-## A full reload is also the only way to register a preset from scripting.
+## Godot only reads export_presets.cfg at project open, and opening Project > Export while its in-memory
+## list is stale overwrites the file. A reload is also the only way to register a preset from scripting.
 func _confirm_create(global_path: String) -> void:
 	var export_path := WavedashExportPresets.localize_export_path(global_path)
 	if WavedashExportPresets.export_dir_contains_project(export_path):
@@ -164,7 +151,6 @@ func _gdextension_note() -> String:
 		note += "\n\n" + warning
 	return note
 
-## WavedashGate refuses this too, but only after the reload this flow would have spent.
 func _reject_root_export_path(export_path: String) -> void:
 	var dialog := AcceptDialog.new()
 	dialog.title = "Choose a Build Folder"

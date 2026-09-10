@@ -1,11 +1,8 @@
 @tool
 extends RefCounted
 
-## Tints and scales this addon's button icons to follow the editor theme.
-##
-## Source SVGs must be white: Button multiplies its icon by the theme's
-## icon_*_color, so anything darker can't reach an arbitrary colour. (Lucide's
-## stock stroke="currentColor" imports as pure black, invisible here.)
+## Source SVGs must be white: Button multiplies its icon by the theme's icon_*_color, so anything
+## darker can't reach an arbitrary colour.
 
 const WavedashCompat = preload("wavedash_compat.gd")
 
@@ -14,9 +11,7 @@ const PRESSED_BRIGHTNESS := 1.15
 
 static func apply_to_button(button: Button) -> void:
 	button.add_theme_constant_override("icon_max_width", _scaled_icon_width())
-	# The theme's own icon colours are opacity-only, since it recolours built-in
-	# icons at import time instead -- a pass this addon opts out of. Tracking the
-	# label keeps a white icon legible in the light theme.
+	# The theme's icon colours are opacity-only; tracking the label keeps a white icon legible in the light theme.
 	var normal := button.get_theme_color("font_color")
 	button.add_theme_color_override("icon_normal_color", normal)
 	button.add_theme_color_override("icon_focused_color", normal)
@@ -26,8 +21,7 @@ static func apply_to_button(button: Button) -> void:
 	button.add_theme_color_override("icon_pressed_color", accent)
 	button.add_theme_color_override("icon_hover_pressed_color", accent)
 
-## Re-run after repopulating: new items arrive unmodulated. The face icon and the
-## popup cap separately, and PopupMenu tints per item rather than by theme colour.
+## Re-run after repopulating: new items arrive unmodulated.
 static func apply_to_dropdown(dropdown: OptionButton) -> void:
 	apply_to_button(dropdown)
 	var popup := dropdown.get_popup()
@@ -40,8 +34,7 @@ static func apply_to_dropdown(dropdown: OptionButton) -> void:
 static func _scaled_icon_width() -> int:
 	return roundi(ICON_SIZE_PX * WavedashCompat.editor_scale())
 
-## The theme's stock pressed colour is accent * up to 3.5, which clips above 1.0
-## and blows the icon out; plain accent reads too dim.
+## The theme's stock pressed colour is accent * up to 3.5, which clips above 1.0 and blows the icon out.
 static func pressed_accent(control: Control) -> Color:
 	var accent := control.get_theme_color("accent_color", "Editor") * PRESSED_BRIGHTNESS
 	accent.a = 1.0

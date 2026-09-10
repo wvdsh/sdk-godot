@@ -1,11 +1,9 @@
 @tool
 extends RefCounted
 
-## Owns res://wavedash.toml. Manages only game_id/upload_dir/[godot].version;
-## every other line passes through verbatim. Tracks line positions rather than
-## parsing a schema, so entrypoint, other engine sections, and whatever a future
-## CLI adds all survive a round trip.
+## Tracks line positions rather than parsing a schema, so every line it doesn't manage survives a round trip.
 
+## Preloads itself so read() can return a typed instance without a class_name.
 const Self_ = preload("wavedash_toml.gd")
 const DEFAULT_PATH := "res://wavedash.toml"
 
@@ -14,7 +12,6 @@ var game_id: String = ""
 var upload_dir: String = ""
 var godot_version: String = ""
 
-## Empty for a never-read instance, in which case write() generates from scratch.
 var _lines: PackedStringArray = []
 var _game_id_line := -1
 var _upload_dir_line := -1
@@ -32,8 +29,7 @@ static func read(path: String = DEFAULT_PATH) -> Self_:
 	var content := file.get_as_text()
 	file.close()
 	result._lines = content.split("\n")
-	# Drop the empty entry a trailing newline produces, so write() can add
-	# exactly one back instead of accumulating a blank line per round trip.
+	# Drop the empty entry a trailing newline produces, so write() adds exactly one back.
 	if result._lines.size() > 0 and result._lines[result._lines.size() - 1] == "":
 		result._lines.remove_at(result._lines.size() - 1)
 
@@ -63,21 +59,17 @@ static func read(path: String = DEFAULT_PATH) -> Self_:
 			result._godot_version_line = i
 	return result
 
-## Must undo exactly what _quote() does, or a read-then-write round trip would
-## double every backslash.
+## Must undo exactly what _quote() does, or a round trip would double every backslash.
 static func _unquote(value: String) -> String:
 	if value.length() < 2 or not value.begins_with("\"") or not value.ends_with("\""):
 		return value
-	# Park escaped backslashes while unescaping quotes, so `\\` followed by `"`
-	# can't be misread as an escaped quote.
+	# Park escaped backslashes while unescaping quotes, so `\\` followed by `"` isn't misread as an escaped quote.
 	var sentinel := char(0xFFFF)
 	return value.substr(1, value.length() - 2) \
 		.replace("\\\\", sentinel) \
 		.replace("\\\"", "\"") \
 		.replace(sentinel, "\\")
 
-## TOML basic-string escaping. Paths are the realistic source of a backslash
-## here, and an unescaped one would silently corrupt the file the CLI reads.
 static func _quote(value: String) -> String:
 	return "\"%s\"" % value.replace("\\", "\\\\").replace("\"", "\\\"")
 
@@ -87,14 +79,12 @@ static func _assignment_line(key: String, value: String) -> String:
 func write(path: String = DEFAULT_PATH) -> Error:
 	var lines := _lines.duplicate()
 
-	# [godot] edits use read()'s original line indices, so they must happen
-	# before the top-of-file inserts below shift everything.
+	# [godot] edits use read()'s original line indices, so they must happen before the top-of-file inserts.
 	if _godot_version_line >= 0:
 		lines[_godot_version_line] = _assignment_line("version", godot_version)
 	elif _godot_section_line >= 0:
 		lines.insert(_godot_section_line + 1, _assignment_line("version", godot_version))
 	else:
-		# Blank line first unless the file already ends in one.
 		if not lines.is_empty() and lines[lines.size() - 1] != "":
 			lines.append("")
 		lines.append("[godot]")

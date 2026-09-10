@@ -14,9 +14,7 @@ var _dev_button: Button
 func _enter_tree() -> void:
 	var plugin_path: String = get_script().resource_path.get_base_dir()
 	var sdk_path: String = plugin_path + "/WavedashSDK.gd"
-	# Only when it's actually wrong: add_autoload_singleton() writes ProjectSettings
-	# unconditionally, which marks the project modified on every launch. Comparing
-	# the resolved target still re-adds a missing or stale entry.
+	# add_autoload_singleton() writes ProjectSettings unconditionally, marking the project modified on every launch.
 	if _resolved_autoload_path() != sdk_path:
 		add_autoload_singleton(SDK_AUTOLOAD_NAME, sdk_path)
 
@@ -35,8 +33,7 @@ func _enter_tree() -> void:
 	add_control_to_container(EditorPlugin.CONTAINER_TOOLBAR, _dev_button)
 	_move_dev_button_next_to_run_bar()
 
-## "" when unset or unresolvable. Godot stores the entry as "*uid://..." when the
-## Project Settings UI wrote it and "*res://..." when a plugin did.
+## Godot stores the entry as "*uid://..." when the Project Settings UI wrote it and "*res://..." when a plugin did.
 func _resolved_autoload_path() -> String:
 	if not ProjectSettings.has_setting(SDK_AUTOLOAD_SETTING):
 		return ""
@@ -46,8 +43,7 @@ func _resolved_autoload_path() -> String:
 	var id := ResourceUID.text_to_id(target)
 	return ResourceUID.get_id_path(id) if ResourceUID.has_id(id) else ""
 
-## CONTAINER_TOOLBAR always appends to the far end of the title bar and there's
-## no API to place it elsewhere, so find EditorRunBar and move in front of it.
+## CONTAINER_TOOLBAR appends to the far end of the title bar, with no API to place a control elsewhere.
 func _move_dev_button_next_to_run_bar() -> void:
 	var toolbar := _dev_button.get_parent()
 	for i in toolbar.get_child_count():

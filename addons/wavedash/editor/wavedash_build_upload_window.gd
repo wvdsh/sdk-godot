@@ -1,11 +1,8 @@
 @tool
 extends AcceptDialog
 
-## Build-push popup. Publishing is left to the wavedash.com builds page.
-##
-## get_ok_button() is reserved for the final "Done" close action: AcceptDialog
-## auto-hides whenever its own OK button is pressed, whatever `confirmed`'s
-## listeners do, so the multi-second push needs a separate PushButton.
+## get_ok_button() is reserved for Done: AcceptDialog auto-hides whenever its OK button is pressed,
+## whatever `confirmed`'s listeners do, so the multi-second push needs its own button.
 
 const WavedashGate = preload("wavedash_gate.gd")
 const WavedashToml = preload("wavedash_toml.gd")
@@ -37,7 +34,6 @@ var _sequence: WavedashStepSequence
 var _push: WavedashBuildPushStep
 var _playtest_url := ""
 
-## Setup here would dirty the open scene and bake session state into a shipped .tscn.
 @onready var _in_edited_scene := WavedashCompat.is_part_of_edited_scene(self)
 
 func _ready() -> void:
@@ -84,8 +80,6 @@ func _set_view(view: int) -> void:
 	_push_button.disabled = view == VIEW_PUSHING
 	_message_edit.editable = view == VIEW_FORM
 
-## The view only advances once the export is actually running -- a refused launch
-## would otherwise leave this stuck on a progress view nothing will ever update.
 func _on_push_pressed() -> void:
 	if _sequence.is_running():
 		return
@@ -94,8 +88,6 @@ func _on_push_pressed() -> void:
 		return
 	_set_view(VIEW_PUSHING)
 
-## State.IDLE here is the failure path; success goes through _on_push_succeeded()
-## and shows the result view instead of resetting the form.
 func _on_state_changed(state: WavedashStepSequence.State) -> void:
 	match state:
 		WavedashStepSequence.State.EXPORTING, WavedashStepSequence.State.ACTIVE:
@@ -105,8 +97,6 @@ func _on_state_changed(state: WavedashStepSequence.State) -> void:
 			if not _result_container.visible:
 				_set_view(VIEW_FORM)
 
-## `description` is what makes a resetting percentage make sense, so show it
-## whenever there is one.
 func _on_progress_changed(percent: int, description: String) -> void:
 	_progress_bar.value = percent
 	var verb := _sequence.current_label()
@@ -124,13 +114,10 @@ func _on_push_succeeded(build_id: String, playtest_url: String) -> void:
 	_manage_builds_button.visible = toml.exists and toml.game_id != ""
 	_set_view(VIEW_RESULT)
 
-## Deliberately leaves the dialog open, unlike Manage Builds -- the result view
-## is unreachable again without pushing another build.
 func _on_play_pressed() -> void:
 	OS.shell_open(_playtest_url)
 
-## Slugs are resolved on the click, not when the result appears: the lookup is
-## 1+N blocking CLI spawns and froze the editor right as the result arrived.
+## Slugs are resolved on the click: the lookup is 1+N blocking CLI spawns.
 func _on_manage_builds_pressed() -> void:
 	OS.shell_open(_builds_page_url())
 	hide()
