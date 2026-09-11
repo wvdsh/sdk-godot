@@ -4,8 +4,6 @@ extends Control
 const WavedashCompat = preload("wavedash_compat.gd")
 const WavedashGate = preload("wavedash_gate.gd")
 
-const MAX_LOG_PARAGRAPHS := 2000
-
 signal gate_changed
 
 func _ready() -> void:
@@ -16,6 +14,7 @@ func _ready() -> void:
 	%PresetRow.log_line.connect(append_log)
 	%ProjectRow.log_line.connect(append_log)
 	%BuildUploadRow.log_line.connect(append_log)
+	$VBoxContainer/OutputRow/ClearButton.pressed.connect(%OutputLog.clear)
 	# Account and CLI state reach BuildUploadRow through ProjectRow, whose refresh() ends by emitting
 	# status_changed. Wiring them to BuildUploadRow as well would refresh it twice per change.
 	%AuthRow.status_changed.connect(%ProjectRow.refresh)
@@ -42,5 +41,3 @@ func _on_gate_changed() -> void:
 ## add_text(), not `text +=`: the latter reparses the whole buffer per line.
 func append_log(text: String) -> void:
 	%OutputLog.add_text(text + "\n")
-	while %OutputLog.get_paragraph_count() > MAX_LOG_PARAGRAPHS:
-		%OutputLog.remove_paragraph(0)

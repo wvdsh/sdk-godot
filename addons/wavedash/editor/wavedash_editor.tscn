@@ -161,10 +161,19 @@ layout_mode = 2
 size_flags_horizontal = 3
 autowrap_mode = 3
 
-[node name="OutputLabel" type="Label" parent="VBoxContainer" unique_id=1068268387]
+[node name="OutputRow" type="HBoxContainer" parent="VBoxContainer" unique_id=1204817363]
 layout_mode = 2
+theme_override_constants/separation = 8
+
+[node name="OutputLabel" type="Label" parent="VBoxContainer/OutputRow" unique_id=1068268387]
+layout_mode = 2
+size_flags_horizontal = 3
 text = "Output"
 clip_text = true
+
+[node name="ClearButton" type="Button" parent="VBoxContainer/OutputRow" unique_id=917364028]
+layout_mode = 2
+text = "Clear"
 
 [node name="OutputLog" type="RichTextLabel" parent="VBoxContainer" unique_id=865781554]
 unique_name_in_owner = true
