@@ -33,7 +33,7 @@ static func fetch_identity() -> Dictionary:
 	var cached = WavedashCompat.session_get(IDENTITY_KEY, null)
 	if cached != null:
 		return cached
-	var result := WavedashCliRunner.run_json(["auth", "status", "--json"])
+	var result := WavedashCliRunner.auth_status()
 	var identity: Dictionary = result.data if result.ok and result.data is Dictionary else {}
 	WavedashCompat.session_set(IDENTITY_KEY, identity)
 	return identity

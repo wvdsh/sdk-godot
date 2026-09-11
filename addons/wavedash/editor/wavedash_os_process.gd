@@ -44,10 +44,16 @@ func _process(_delta: float) -> void:
 		finished.emit(WavedashCompat.os_get_process_exit_code(_pid))
 
 func _drain(pipe: FileAccess) -> void:
+	for line in read_available_lines(pipe):
+		output_line.emit(line)
+
+static func read_available_lines(pipe: FileAccess) -> PackedStringArray:
+	var lines := PackedStringArray()
 	if not pipe:
-		return
+		return lines
 	while true:
 		var line := pipe.get_line()
 		if line == "":
 			break
-		output_line.emit(line)
+		lines.append(line)
+	return lines

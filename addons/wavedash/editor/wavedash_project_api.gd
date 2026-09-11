@@ -43,7 +43,7 @@ static func list_teams() -> Array[Team]:
 	var cached = WavedashCompat.session_get(TEAMS_KEY, null)
 	if cached != null:
 		return _teams_from(cached)
-	var result := WavedashCliRunner.run_json(["team", "list", "--json"])
+	var result := WavedashCliRunner.team_list()
 	if not result.ok or not (result.data is Array):
 		var none: Array[Team] = []
 		return none
@@ -64,7 +64,7 @@ static func list_projects(team_id: String) -> Array[Project]:
 	var by_team: Dictionary = WavedashCompat.session_get(PROJECTS_KEY, {})
 	if by_team.has(team_id):
 		return _projects_from(by_team[team_id], team_id)
-	var result := WavedashCliRunner.run_json(["project", "list", "--team-id", team_id, "--json"])
+	var result := WavedashCliRunner.project_list(team_id)
 	if not result.ok or not (result.data is Array):
 		var none: Array[Project] = []
 		return none
@@ -85,7 +85,7 @@ static func _projects_from(raw: Array, team_id: String) -> Array[Project]:
 ## `create` has no --json; success is one line ending "(id: <id>)". Matched on that ASCII tail, never
 ## the leading "✓", which the Windows console codepage mangles.
 static func create_team(name: String) -> Team:
-	var result := WavedashCliRunner.run(["team", "create", "--name", name])
+	var result := WavedashCliRunner.team_create(name)
 	if not result.ok:
 		return null
 	var id := _extract_id(result.output)
@@ -98,7 +98,7 @@ static func create_team(name: String) -> Team:
 	return team
 
 static func create_project(title: String, team_id: String) -> Project:
-	var result := WavedashCliRunner.run(["project", "create", "--title", title, "--team-id", team_id])
+	var result := WavedashCliRunner.project_create(title, team_id)
 	if not result.ok:
 		return null
 	var id := _extract_id(result.output)
