@@ -4,8 +4,8 @@ extends RefCounted
 const WavedashAuth = preload("wavedash_auth.gd")
 const WavedashCli = preload("wavedash_cli.gd")
 const WavedashExportPresets = preload("wavedash_export_presets.gd")
-const WavedashProjectApi = preload("wavedash_project_api.gd")
 const WavedashToml = preload("wavedash_toml.gd")
+const WavedashProjectApi = preload("wavedash_project_api.gd")
 class Blocker:
 	static func none() -> Blocker:
 		return make("", "")
@@ -42,15 +42,15 @@ static func no_game() -> Blocker:
 		"Connect a game on Wavedash first.",
 		"Not connected to a Wavedash game. Connect from the Wavedash dock.")
 
-static func no_export_templates() -> Blocker:
-	return Blocker.make(
-		"Install export templates: Editor > Manage Export Templates.",
-		"Web export templates aren't installed. Install them under Editor > Manage Export Templates.")
-
 static func game_not_found() -> Blocker:
 	return Blocker.make(
 		"Wavedash game not found.",
 		"The game in wavedash.toml isn't visible to this account. Reconnect from the Wavedash dock.")
+
+static func no_export_templates() -> Blocker:
+	return Blocker.make(
+		"Install export templates: Editor > Manage Export Templates.",
+		"Web export templates aren't installed. Install them under Editor > Manage Export Templates.")
 
 const NO_EXPORT_PATH := "Preset has no export path. Set one in Export Presets."
 const EXPORT_PATH_IS_ROOT := "Preset exports into \"%s\", which would cause Wavedash to upload your whole project."
@@ -70,7 +70,7 @@ static func check_can_build() -> Blocker:
 	var toml := WavedashToml.read()
 	if not toml.exists or toml.game_id == "":
 		return no_game()
-	if WavedashProjectApi.find_project(toml.game_id) == null:
+	if WavedashProjectApi.is_known_missing(toml.game_id):
 		return game_not_found()
 	if WavedashExportPresets.get_active_preset() == "":
 		return no_preset()

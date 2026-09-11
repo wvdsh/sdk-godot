@@ -34,10 +34,12 @@ class Project:
 ## held for the session. Absent rather than empty when uncached, so a genuine "no teams" is still a hit.
 const TEAMS_KEY := "project_api_teams"
 const PROJECTS_KEY := "project_api_projects"
+const MISSING_GAMES_KEY := "project_api_missing_games"
 
 static func invalidate() -> void:
 	WavedashCompat.session_set(TEAMS_KEY, null)
 	WavedashCompat.session_set(PROJECTS_KEY, null)
+	WavedashCompat.session_set(MISSING_GAMES_KEY, null)
 
 static func list_teams() -> Array[Team]:
 	var cached = WavedashCompat.session_get(TEAMS_KEY, null)
@@ -113,11 +115,34 @@ static func create_project(title: String, team_id: String) -> Project:
 
 static func find_project_with_team(game_id: String) -> Dictionary:
 	if game_id != "":
-		for team in list_teams():
+		var teams := list_teams()
+		for team in teams:
 			for project in list_projects(team.id):
 				if project.id == game_id:
 					return {"team": team, "project": project}
+		if _all_lists_cached(teams):
+			_remember_missing(game_id)
 	return {"team": null, "project": null}
+
+## Only a game absent from fully fetched lists counts as missing; a failed or timed-out
+## lookup proves nothing.
+static func is_known_missing(game_id: String) -> bool:
+	return game_id in WavedashCompat.session_get(MISSING_GAMES_KEY, [])
+
+static func _remember_missing(game_id: String) -> void:
+	var missing: Array = WavedashCompat.session_get(MISSING_GAMES_KEY, [])
+	if game_id not in missing:
+		missing.append(game_id)
+	WavedashCompat.session_set(MISSING_GAMES_KEY, missing)
+
+static func _all_lists_cached(teams: Array[Team]) -> bool:
+	if WavedashCompat.session_get(TEAMS_KEY, null) == null:
+		return false
+	var by_team: Dictionary = WavedashCompat.session_get(PROJECTS_KEY, {})
+	for team in teams:
+		if not by_team.has(team.id):
+			return false
+	return true
 
 static func find_project(game_id: String) -> Project:
 	return find_project_with_team(game_id).project
