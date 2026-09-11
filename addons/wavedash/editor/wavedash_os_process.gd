@@ -26,9 +26,6 @@ func start(path: String, arguments: PackedStringArray) -> bool:
 	set_process(true)
 	return true
 
-func get_pid() -> int:
-	return _pid
-
 func stop() -> void:
 	if _pid != NO_PID and OS.is_process_running(_pid):
 		OS.kill(_pid)

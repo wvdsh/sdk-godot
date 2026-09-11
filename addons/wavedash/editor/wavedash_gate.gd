@@ -19,9 +19,6 @@ class Blocker:
 		blocker.detailed_description = detailed_description
 		return blocker
 
-	static func make_uniform(message: String) -> Blocker:
-		return make(message, message)
-
 	func is_blocking() -> bool:
 		return detailed_description != ""
 
@@ -79,7 +76,7 @@ static func check_can_build() -> Blocker:
 		return no_preset()
 	var path_problem := check_export_path()
 	if path_problem != "":
-		return Blocker.make_uniform(path_problem)
+		return Blocker.make(path_problem, path_problem)
 	if not _has_web_export_templates():
 		return no_export_templates()
 	return Blocker.none()

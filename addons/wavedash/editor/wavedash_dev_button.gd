@@ -50,14 +50,7 @@ func _apply_theme_aware_icon_styling() -> void:
 	if _applying_icon_style:
 		return
 	_applying_icon_style = true
-	var color := get_theme_color("font_color", "Editor")
-	for property in ["icon_normal_color", "icon_hover_color", "icon_disabled_color", "icon_focused_color"]:
-		add_theme_color_override(property, color)
-	var accent := WavedashIconTheme.pressed_accent(self)
-	for property in ["icon_pressed_color", "icon_hover_pressed_color"]:
-		add_theme_color_override(property, accent)
-	var size_px := WavedashIconTheme.ICON_SIZE_PX
-	add_theme_constant_override("icon_max_width", roundi(size_px * WavedashCompat.editor_scale()))
+	WavedashIconTheme.apply_to_button(self)
 	_square_up_margins()
 	_applying_icon_style = false
 

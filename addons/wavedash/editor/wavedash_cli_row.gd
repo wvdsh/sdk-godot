@@ -78,8 +78,7 @@ func _run_install() -> void:
 	var cmd := WavedashCli.get_install_shell_command()
 	_process = WavedashOSProcess.new()
 	add_child(_process)
-	_process.output_line.connect(func(text: String) -> void: log_line.emit(text))
-	_process.finished.connect(_on_install_finished)
+	_watch_process(_on_install_finished)
 	if not _process.start(cmd.path, cmd.arguments):
 		log_line.emit("Failed to launch installer.")
 		_on_install_finished(LAUNCH_FAILED_EXIT_CODE)
@@ -171,14 +170,17 @@ func _on_update_pressed() -> void:
 		_on_update_finished(LAUNCH_FAILED_EXIT_CODE)
 		return
 	log_line.emit("$ %s update" % _process.executable_path)
-	_process.output_line.connect(func(text: String) -> void: log_line.emit(text))
-	_process.finished.connect(_on_update_finished)
+	_watch_process(_on_update_finished)
 
 func _on_update_finished(exit_code: int) -> void:
 	log_line.emit("Update exited with code %d." % exit_code)
 	_cleanup_process()
 	WavedashCli.recheck_installation()
 	visible = false
+
+func _watch_process(on_finished: Callable) -> void:
+	_process.output_line.connect(func(text: String) -> void: log_line.emit(text))
+	_process.finished.connect(on_finished)
 
 func _cleanup_process() -> void:
 	if is_instance_valid(_process):

@@ -69,14 +69,11 @@ func _refresh() -> void:
 		_dropdown.add_icon_item(PresetIcon, names[i])
 		_dropdown.set_item_metadata(i, names[i])
 	_dropdown.add_separator()
-	_add_action_item(CreateIcon, "Create New Wavedash Export...", CREATE_NEW_ID)
+	_dropdown.add_icon_item(CreateIcon, "Create New Wavedash Export...")
+	_dropdown.set_item_metadata(_dropdown.item_count - 1, CREATE_NEW_ID)
 	_select_active()
 	WavedashIconTheme.apply_to_dropdown(_dropdown)
 	status_changed.emit()
-
-func _add_action_item(icon: Texture2D, label: String, id: String) -> void:
-	_dropdown.add_icon_item(icon, label)
-	_dropdown.set_item_metadata(_dropdown.item_count - 1, id)
 
 ## OptionButton shows whatever was picked, actions included.
 func _select_active() -> void:

@@ -8,8 +8,6 @@ const WavedashOSProcess = preload("wavedash_os_process.gd")
 
 class Result:
 	var ok := false
-	var cli_missing := false
-	var blocked_outside_editor := false
 	var exit_code := -1
 	var output := ""
 
@@ -66,14 +64,12 @@ static func _json_body(output: String) -> String:
 
 static func _execute(args: PackedStringArray, result: Result) -> void:
 	if not Engine.is_editor_hint():
-		result.blocked_outside_editor = true
 		push_error(WavedashCli.BLOCKED_MESSAGE)
 		return
 	var output := []
 	for attempt in SPAWN_ATTEMPTS:
 		var exe := WavedashCli.resolve_executable()
 		if exe == "":
-			result.cli_missing = true
 			return
 		output.clear()
 		result.exit_code = OS.execute(exe, args, output, true)

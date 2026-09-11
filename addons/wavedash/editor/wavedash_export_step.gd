@@ -25,8 +25,7 @@ func _ready() -> void:
 func _report_finished(exit_code: int) -> void:
 	if exit_code == 0 or was_stopped():
 		return
-	output_line.emit("Export failed with exit code %d." % exit_code)
-	WavedashLog.error("Export failed with exit code %d." % exit_code)
+	_fail("Export failed with exit code %d." % exit_code)
 
 func _args() -> PackedStringArray:
 	return PackedStringArray([
@@ -38,16 +37,14 @@ func _args() -> PackedStringArray:
 func _spawn() -> WavedashOSProcess:
 	var gate := WavedashGate.check_can_build().detailed_description
 	if gate != "":
-		output_line.emit(gate)
-		WavedashLog.error(gate)
+		_fail(gate)
 		return null
 	_sync_upload_dir()
 	_warn_about_gdextensions()
 	var process := WavedashOSProcess.new()
 	add_child(process)
 	if not process.start(OS.get_executable_path(), _args()):
-		output_line.emit("Failed to launch export.")
-		WavedashLog.error("Failed to launch export.")
+		_fail("Failed to launch export.")
 		process.queue_free()
 		return null
 	return process
@@ -68,6 +65,10 @@ func _warn_about_gdextensions() -> void:
 		output_line.emit(text)
 		WavedashLog.warning(text)
 
+func _fail(text: String) -> void:
+	output_line.emit(text)
+	WavedashLog.error(text)
+
 ## Both CLI commands read upload_dir, so a stale value silently uses the previous build.
 func _sync_upload_dir() -> void:
 	var derived := WavedashExportPresets.derive_upload_dir()
@@ -78,9 +79,7 @@ func _sync_upload_dir() -> void:
 	toml.upload_dir = derived
 	var err := toml.write()
 	if err != OK:
-		var failure := "Couldn't update wavedash.toml's upload_dir to \"%s\" (%s) -- Wavedash would use \"%s\" instead." % [derived, error_string(err), previous]
-		output_line.emit(failure)
-		WavedashLog.error(failure)
+		_fail("Couldn't update wavedash.toml's upload_dir to \"%s\" (%s) -- Wavedash would use \"%s\" instead." % [derived, error_string(err), previous])
 		return
 	var updated := "Updated wavedash.toml upload_dir: \"%s\" -> \"%s\" (follows the active preset)." % [previous, derived]
 	output_line.emit(updated)
