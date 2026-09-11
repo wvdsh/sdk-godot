@@ -85,6 +85,14 @@ static func activate_editor_menu_item(english_label: String) -> bool:
 					return true
 	return false
 
+## An engine that can't answer counts as having the template; the export itself reports the miss.
+static func has_web_export_template(file_name: String) -> bool:
+	var platform: Object = ClassDB.instantiate("EditorExportPlatformWeb")
+	if platform == null:
+		return true
+	var found = platform.call("find_export_template", file_name)
+	return not (found is Dictionary) or found.get("result", OK) == OK
+
 static func restart_editor(save: bool) -> void:
 	_editor_interface().call("restart_editor", save)
 

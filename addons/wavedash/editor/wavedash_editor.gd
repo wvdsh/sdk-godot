@@ -2,6 +2,7 @@
 extends Control
 
 const WavedashCompat = preload("wavedash_compat.gd")
+const WavedashGate = preload("wavedash_gate.gd")
 
 const MAX_LOG_PARAGRAPHS := 2000
 
@@ -27,8 +28,12 @@ func _ready() -> void:
 func _connect_export_template_refresh() -> void:
 	for child in WavedashCompat.editor_base_control().get_children():
 		if child.get_class() == "ExportTemplateManager":
-			child.visibility_changed.connect(_on_gate_changed)
+			child.visibility_changed.connect(_on_export_templates_changed)
 			return
+
+func _on_export_templates_changed() -> void:
+	WavedashGate.forget_export_templates()
+	_on_gate_changed()
 
 func _on_gate_changed() -> void:
 	%BuildUploadRow.refresh()

@@ -5,7 +5,9 @@ const WavedashAuth = preload("wavedash_auth.gd")
 const WavedashCli = preload("wavedash_cli.gd")
 const WavedashExportPresets = preload("wavedash_export_presets.gd")
 const WavedashToml = preload("wavedash_toml.gd")
+const WavedashCompat = preload("wavedash_compat.gd")
 const WavedashProjectApi = preload("wavedash_project_api.gd")
+
 class Blocker:
 	static func none() -> Blocker:
 		return make("", "")
@@ -52,6 +54,8 @@ static func no_export_templates() -> Blocker:
 		"Install export templates: Editor > Manage Export Templates.",
 		"Web export templates aren't installed. Install them under Editor > Manage Export Templates.")
 
+const WEB_EXPORT_TEMPLATES_KEY := "web_export_templates"
+
 const NO_EXPORT_PATH := "Preset has no export path. Set one in Export Presets."
 const EXPORT_PATH_IS_ROOT := "Preset exports into \"%s\", which would cause Wavedash to upload your whole project."
 const EXPORT_DIR_MISSING := "Export folder \"%s\" doesn't exist."
@@ -81,13 +85,17 @@ static func check_can_build() -> Blocker:
 		return no_export_templates()
 	return Blocker.none()
 
-## An engine that can't answer doesn't block; the export step reports whatever goes wrong itself.
+static func forget_export_templates() -> void:
+	WavedashCompat.session_set(WEB_EXPORT_TEMPLATES_KEY, null)
+
+## Cached: instantiating the platform rasterises its logos every time.
 static func _has_web_export_templates() -> bool:
-	var platform := ClassDB.instantiate("EditorExportPlatformWeb")
-	if platform == null:
-		return true
-	var found = platform.call("find_export_template", "web_release.zip")
-	return not (found is Dictionary) or found.get("result", OK) == OK
+	var cached = WavedashCompat.session_get(WEB_EXPORT_TEMPLATES_KEY, null)
+	if cached != null:
+		return cached
+	var installed := WavedashCompat.has_web_export_template("web_release.zip")
+	WavedashCompat.session_set(WEB_EXPORT_TEMPLATES_KEY, installed)
+	return installed
 
 static func check_export_path() -> String:
 	if WavedashExportPresets.get_active_preset() == "":
