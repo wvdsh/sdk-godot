@@ -55,16 +55,12 @@ layout_mode = 2
 theme_override_constants/separation = 8
 
 [node name="BuildIdLabel" type="Label" parent="Content/ResultContainer" unique_id=803947329]
-custom_minimum_size = Vector2(350, 0)
 layout_mode = 2
-autowrap_mode = 3
 
 [node name="PlayButton" type="Button" parent="Content/ResultContainer" unique_id=1616437512]
 layout_mode = 2
 text = "Play This Build"
-clip_text = true
 
 [node name="ManageBuildsButton" type="Button" parent="Content/ResultContainer" unique_id=490888396]
 layout_mode = 2
 text = "Manage Builds & Publish on wavedash.com"
-clip_text = true

@@ -79,6 +79,7 @@ func _set_view(view: int) -> void:
 	get_ok_button().visible = view == VIEW_RESULT
 	_push_button.disabled = view == VIEW_PUSHING
 	_message_edit.editable = view == VIEW_FORM
+	reset_size.call_deferred()
 
 func _on_push_pressed() -> void:
 	if _sequence.is_running():
