@@ -1,0 +1,86 @@
+[gd_scene format=3 uid="uid://1m1xpryn4jxc"]
+
+[ext_resource type="Script" path="res://addons/wavedash/editor/wavedash_dev_button.gd" id="1"]
+[ext_resource type="Texture2D" path="res://addons/wavedash/editor/assets/wavedash_white.svg" id="1_nba5s"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_uxxgv"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.1, 0.1, 0.1, 0.6)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+corner_detail = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_60y7t"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0, 0, 0, 0.6)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+corner_detail = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_j4rcs"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.225, 0.225, 0.225, 0.6)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+corner_detail = 5
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_qyq2b"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(1, 0.365, 0.365, 1)
+draw_center = false
+border_width_left = 2
+border_width_top = 2
+border_width_right = 2
+border_width_bottom = 2
+corner_detail = 1
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_itvsl"]
+content_margin_left = 4.0
+content_margin_top = 4.0
+content_margin_right = 4.0
+content_margin_bottom = 4.0
+bg_color = Color(0.1, 0.1, 0.1, 0.3)
+corner_radius_top_left = 3
+corner_radius_top_right = 3
+corner_radius_bottom_right = 3
+corner_radius_bottom_left = 3
+corner_detail = 5
+
+[node name="WavedashDevButton" type="Button" unique_id=1826777012]
+size_flags_horizontal = 4
+size_flags_vertical = 4
+tooltip_text = "Export the active Wavedash preset and run `wavedash dev` (output streams to the Wavedash dock)."
+focus_mode = 0
+theme_type_variation = &"RunBarButton"
+theme_override_colors/icon_normal_color = Color(0, 0, 0, 1)
+theme_override_colors/icon_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/icon_hover_color = Color(0, 0, 0, 1)
+theme_override_colors/icon_hover_pressed_color = Color(0, 0, 0, 1)
+theme_override_colors/icon_disabled_color = Color(0, 0, 0, 1)
+theme_override_constants/icon_max_width = 24
+theme_override_styles/normal = SubResource("StyleBoxFlat_uxxgv")
+theme_override_styles/pressed = SubResource("StyleBoxFlat_60y7t")
+theme_override_styles/hover = SubResource("StyleBoxFlat_j4rcs")
+theme_override_styles/hover_pressed = SubResource("StyleBoxFlat_qyq2b")
+theme_override_styles/disabled = SubResource("StyleBoxFlat_itvsl")
+icon = ExtResource("1_nba5s")
+icon_alignment = 1
+script = ExtResource("1")
