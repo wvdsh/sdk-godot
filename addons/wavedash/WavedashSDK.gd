@@ -84,6 +84,10 @@ signal user_avatar_loaded(texture: Texture2D, user_id: String)
 signal got_friends(payload)
 signal got_user_jwt(payload)
 signal fullscreen_changed(payload)
+## Retained for compatibility. This signal is no longer emitted.
+## @deprecated: Manage game audio locally. This signal will be removed in a future major release.
+@warning_ignore("unused_signal")
+signal mute_changed(payload)
 signal user_presence_updated(payload)
 signal got_is_entitled(payload)
 signal got_entitlements(payload)
@@ -165,6 +169,25 @@ func request_fullscreen(fullscreen: bool) -> bool:
 func toggle_fullscreen() -> bool:
 	if _is_web and WavedashJS:
 		return await _invoke_js_returning_bool(WavedashJS.toggleFullscreen())
+	return false
+
+## No-op. Always returns false; site audio settings are independent of the game.
+## @deprecated: Manage game audio locally. This method will be removed in a future major release.
+func is_muted() -> bool:
+	push_warning("WavedashSDK.is_muted() is deprecated and is now a no-op. Manage game audio locally; this method will be removed in a future major release.")
+	return false
+
+## No-op. Always returns false; manage game audio locally.
+## @deprecated: Manage game audio locally. This method will be removed in a future major release.
+@warning_ignore("unused_parameter")
+func request_mute(muted: bool) -> bool:
+	push_warning("WavedashSDK.request_mute() is deprecated and is now a no-op. Manage game audio locally; this method will be removed in a future major release.")
+	return false
+
+## No-op. Always returns false; manage game audio locally.
+## @deprecated: Manage game audio locally. This method will be removed in a future major release.
+func toggle_mute() -> bool:
+	push_warning("WavedashSDK.toggle_mute() is deprecated and is now a no-op. Manage game audio locally; this method will be removed in a future major release.")
 	return false
 
 func _fetch_user() -> Dictionary:

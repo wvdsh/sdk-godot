@@ -16,6 +16,9 @@ const JS_EVENT_BACKEND_CONNECTED = "BackendConnected"
 const JS_EVENT_BACKEND_RECONNECTING = "BackendReconnecting"
 const JS_EVENT_BACKEND_DISCONNECTED = "BackendDisconnected"
 const JS_EVENT_FULLSCREEN_CHANGED = "FullscreenChanged"
+## Retained for compatibility. This event is no longer emitted.
+## @deprecated: This event will be removed in a future major release.
+const JS_EVENT_MUTE_CHANGED = "MuteChanged"
 const JS_EVENT_ENTITLEMENTS_GRANTED = "EntitlementsGranted"
 
 
