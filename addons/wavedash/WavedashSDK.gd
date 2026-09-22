@@ -167,21 +167,6 @@ func toggle_fullscreen() -> bool:
 		return await _invoke_js_returning_bool(WavedashJS.toggleFullscreen())
 	return false
 
-## Deprecated no-op. Always returns false; site audio settings are independent of the game.
-func is_muted() -> bool:
-	push_warning("WavedashSDK.is_muted() is deprecated and is now a no-op")
-	return false
-
-## Deprecated no-op. Always returns false; manage game audio locally.
-func request_mute(_muted: bool) -> bool:
-	push_warning("WavedashSDK.request_mute() is deprecated and is now a no-op")
-	return false
-
-## Deprecated no-op. Always returns false; manage game audio locally.
-func toggle_mute() -> bool:
-	push_warning("WavedashSDK.toggle_mute() is deprecated and is now a no-op")
-	return false
-
 func _fetch_user() -> Dictionary:
 	if _cached_user.is_empty() and _is_web and WavedashJS:
 		_cached_user = JSON.parse_string(WavedashJS.getUser())
