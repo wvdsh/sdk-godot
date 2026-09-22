@@ -31,6 +31,9 @@ var _builds_origin : String = ""
 # Handle events broadcasted from JS to Godot
 # JS -> GD
 var _js_callback_receiver : JavaScriptObject
+var _listener_track_timer : Timer
+var _listener_track_callbacks : Array = []
+var _untracked_listener_signals : Array = []
 
 # Per-request tracking for async JS calls (GD -> JS -> GD)
 # Each call gets a unique ID so concurrent awaits don't cross-wire responses
@@ -123,6 +126,7 @@ func _enter_tree():
 		if not _has_js_buffer_transfer:
 			_eval_returns_byte_array = JavaScriptBridge.eval("new Uint8Array([1,2,3])") is PackedByteArray
 		_install_js_cast()
+		_start_listener_tracking()
 
 func init(config: Dictionary):
 	assert(_entered_tree, "WavedashSDK.init() called before WavedashSDK was added to the tree")
@@ -1119,6 +1123,55 @@ func _invoke_js_returning_bool(js_promise) -> bool:
 	_active_callbacks.erase(req_id)
 	return bool(result)
 
+
+# Godot does not notify us when a signal is connected.
+# Check every 5 seconds and notify JS if Godot is listening for a given event.
+# Stop entirely after every Wavedash event signal has been reported.
+func _start_listener_tracking() -> void:
+	_untracked_listener_signals = [
+		[lobby_message, Constants.JS_EVENT_LOBBY_MESSAGE],
+		[lobby_joined, Constants.JS_EVENT_LOBBY_JOINED],
+		[lobby_kicked, Constants.JS_EVENT_LOBBY_KICKED],
+		[lobby_users_updated, Constants.JS_EVENT_LOBBY_USERS_UPDATED],
+		[lobby_data_updated, Constants.JS_EVENT_LOBBY_DATA_UPDATED],
+		[lobby_invite, Constants.JS_EVENT_LOBBY_INVITE],
+		[p2p_connection_established, Constants.JS_EVENT_P2P_CONNECTION_ESTABLISHED],
+		[p2p_connection_failed, Constants.JS_EVENT_P2P_CONNECTION_FAILED],
+		[p2p_peer_disconnected, Constants.JS_EVENT_P2P_PEER_DISCONNECTED],
+		[p2p_peer_reconnecting, Constants.JS_EVENT_P2P_PEER_RECONNECTING],
+		[p2p_peer_reconnected, Constants.JS_EVENT_P2P_PEER_RECONNECTED],
+		[p2p_packet_dropped, Constants.JS_EVENT_P2P_PACKET_DROPPED],
+		[stats_stored, Constants.JS_EVENT_STATS_STORED],
+		[backend_connected, Constants.JS_EVENT_BACKEND_CONNECTED],
+		[backend_reconnecting, Constants.JS_EVENT_BACKEND_RECONNECTING],
+		[backend_disconnected, Constants.JS_EVENT_BACKEND_DISCONNECTED],
+		[fullscreen_changed, Constants.JS_EVENT_FULLSCREEN_CHANGED],
+		[mute_changed, Constants.JS_EVENT_MUTE_CHANGED],
+		[entitlements_granted, Constants.JS_EVENT_ENTITLEMENTS_GRANTED],
+	]
+	_listener_track_timer = Timer.new()
+	_listener_track_timer.wait_time = 5.0
+	_listener_track_timer.timeout.connect(_poll_signal_listeners)
+	add_child(_listener_track_timer)
+	_listener_track_timer.start()
+
+func _poll_signal_listeners() -> void:
+	if WavedashJS == null:
+		return
+	var still_untracked: Array = []
+	for pair in _untracked_listener_signals:
+		var sig: Signal = pair[0]
+		if sig.get_connections().is_empty():
+			still_untracked.append(pair)
+			continue
+		var callback := JavaScriptBridge.create_callback(func(_args): pass)
+		_listener_track_callbacks.append(callback)
+		WavedashJS.addEventListener(pair[1], callback)
+	_untracked_listener_signals = still_untracked
+	if _untracked_listener_signals.is_empty() and _listener_track_timer:
+		_listener_track_timer.stop()
+		_listener_track_timer.queue_free()
+		_listener_track_timer = null
 
 # Handle events broadcasted from JS to Godot
 func _dispatch_js_event(args):
