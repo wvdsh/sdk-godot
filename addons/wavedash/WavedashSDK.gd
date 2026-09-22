@@ -84,7 +84,6 @@ signal user_avatar_loaded(texture: Texture2D, user_id: String)
 signal got_friends(payload)
 signal got_user_jwt(payload)
 signal fullscreen_changed(payload)
-signal mute_changed(payload)
 signal user_presence_updated(payload)
 signal got_is_entitled(payload)
 signal got_entitlements(payload)
@@ -168,26 +167,19 @@ func toggle_fullscreen() -> bool:
 		return await _invoke_js_returning_bool(WavedashJS.toggleFullscreen())
 	return false
 
-## Whether the game is currently muted.
-## Mirrored from the Wavedash host page, which owns the mute control
+## Deprecated no-op. Always returns false; site audio settings are independent of the game.
 func is_muted() -> bool:
-	if _is_web and WavedashJS:
-		return WavedashJS.isMuted()
+	push_warning("WavedashSDK.is_muted() is deprecated and is now a no-op")
 	return false
 
-## Ask the host to mute (true) or unmute (false). Returns true if the change was
-## applied, false if it was rejected — the host won't let the game unmute when
-## the player has explicitly muted from the Wavedash UI.
-func request_mute(muted: bool) -> bool:
-	if _is_web and WavedashJS:
-		return await _invoke_js_returning_bool(WavedashJS.requestMute(muted))
+## Deprecated no-op. Always returns false; manage game audio locally.
+func request_mute(_muted: bool) -> bool:
+	push_warning("WavedashSDK.request_mute() is deprecated and is now a no-op")
 	return false
 
-## Toggle mute. Returns true if the change was applied, false if it was rejected
-## (e.g. false if trying to unmute over an explicit player mute).
+## Deprecated no-op. Always returns false; manage game audio locally.
 func toggle_mute() -> bool:
-	if _is_web and WavedashJS:
-		return await _invoke_js_returning_bool(WavedashJS.toggleMute())
+	push_warning("WavedashSDK.toggle_mute() is deprecated and is now a no-op")
 	return false
 
 func _fetch_user() -> Dictionary:
@@ -1146,7 +1138,6 @@ func _start_listener_tracking() -> void:
 		[backend_reconnecting, Constants.JS_EVENT_BACKEND_RECONNECTING],
 		[backend_disconnected, Constants.JS_EVENT_BACKEND_DISCONNECTED],
 		[fullscreen_changed, Constants.JS_EVENT_FULLSCREEN_CHANGED],
-		[mute_changed, Constants.JS_EVENT_MUTE_CHANGED],
 		[entitlements_granted, Constants.JS_EVENT_ENTITLEMENTS_GRANTED],
 	]
 	_listener_track_timer = Timer.new()
@@ -1260,10 +1251,6 @@ func _dispatch_js_event(args):
 			var data = JSON.parse_string(payload)
 			_log("Fullscreen changed: %s" % str(payload))
 			fullscreen_changed.emit(data)
-		Constants.JS_EVENT_MUTE_CHANGED:
-			var data = JSON.parse_string(payload)
-			_log("Mute changed: %s" % str(payload))
-			mute_changed.emit(data)
 		Constants.JS_EVENT_ENTITLEMENTS_GRANTED:
 			var data = JSON.parse_string(payload)
 			_log("Purchase completed: %s" % str(payload))

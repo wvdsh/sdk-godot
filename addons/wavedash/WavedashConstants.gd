@@ -16,7 +16,6 @@ const JS_EVENT_BACKEND_CONNECTED = "BackendConnected"
 const JS_EVENT_BACKEND_RECONNECTING = "BackendReconnecting"
 const JS_EVENT_BACKEND_DISCONNECTED = "BackendDisconnected"
 const JS_EVENT_FULLSCREEN_CHANGED = "FullscreenChanged"
-const JS_EVENT_MUTE_CHANGED = "MuteChanged"
 const JS_EVENT_ENTITLEMENTS_GRANTED = "EntitlementsGranted"
 
 
