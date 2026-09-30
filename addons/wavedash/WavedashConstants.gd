@@ -19,7 +19,9 @@ const JS_EVENT_FULLSCREEN_CHANGED = "FullscreenChanged"
 ## Retained for compatibility. This event is no longer emitted.
 ## @deprecated: This event will be removed in a future major release.
 const JS_EVENT_MUTE_CHANGED = "MuteChanged"
+# Deprecated: use JS_EVENT_PURCHASE_COMPLETED, which also covers consumables
 const JS_EVENT_ENTITLEMENTS_GRANTED = "EntitlementsGranted"
+const JS_EVENT_PURCHASE_COMPLETED = "PurchaseCompleted"
 
 
 # Platform Types
@@ -48,6 +50,17 @@ const UGC_TYPE_OTHER = 4
 # UGC Visibility
 const UGC_VISIBILITY_PUBLIC = 0
 const UGC_VISIBILITY_PRIVATE = 2
+
+# Purchase types (type field on the purchase_completed payload)
+const PURCHASE_TYPE_DURABLE = "DURABLE"
+const PURCHASE_TYPE_CONSUMABLE = "CONSUMABLE"
+
+# fulfill_purchase statuses. ALREADY_FULFILLED counts as success too: the game
+# or its backend fulfilled it earlier, or it's a durable. NOT_FOUND means
+# the purchase is unknown or was refunded, so don't grant it.
+const FULFILL_PURCHASE_STATUS_FULFILLED = "FULFILLED"
+const FULFILL_PURCHASE_STATUS_ALREADY_FULFILLED = "ALREADY_FULFILLED"
+const FULFILL_PURCHASE_STATUS_NOT_FOUND = "NOT_FOUND"
 
 # Avatar Sizes
 const AVATAR_SIZE_SMALL = 64   # 64x64 - Lists, chat bubbles
