@@ -92,7 +92,12 @@ signal user_presence_updated(payload)
 signal got_is_entitled(payload)
 signal got_entitlements(payload)
 signal paywall_resolved(payload)
+## Fired when the player is granted paid content. Payload: { contentIdentifiers }.
+## @deprecated: Connect purchase_completed instead, which also covers consumables.
 signal entitlements_granted(payload)
+signal purchase_completed(payload)
+signal got_unfulfilled_purchases(payload)
+signal purchase_fulfilled(payload)
 signal content_downloaded(payload)
 
 func _log(msg: String) -> void:
@@ -851,7 +856,8 @@ func get_entitlements():
 ## opens the modal and resolves with whether the user completed the purchase.
 ## After a successful purchase the JWT is refreshed automatically so a
 ## subsequent resource fetch is authenticated with the new purchase, and is_entitled
-## will return true if the purchase was successful.
+## will return true if the purchase was successful. For a consumable, grant it
+## from the purchase_completed signal rather than from this result.
 ## Response shape: { success, data: <bool>, message }.
 func trigger_paywall(content_identifier: String):
 	if _is_web and WavedashJS:
@@ -861,6 +867,38 @@ func trigger_paywall(content_identifier: String):
 	else:
 		var result = _web_unsupported("trigger_paywall")
 		paywall_resolved.emit(result)
+		return result
+
+## Consumable purchases the game hasn't fulfilled, oldest first. These already
+## arrive through purchase_completed at launch, but each purchase fires once per
+## session: use this to retry one whose fulfill_purchase call failed.
+## Response shape: { success, data: [<purchase>], message }, each purchase shaped
+## like the purchase_completed payload.
+func get_unfulfilled_purchases():
+	if _is_web and WavedashJS:
+		var result = await _invoke_js(WavedashJS.getUnfulfilledPurchases())
+		got_unfulfilled_purchases.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("get_unfulfilled_purchases")
+		got_unfulfilled_purchases.emit(result)
+		return result
+
+## Mark a consumable purchase fulfilled once the grant is saved, so it stops
+## being redelivered. A game's backend can do the same with
+## POST /api/purchases/{purchaseId}/fulfill and the webhook's JWT; both are
+## idempotent, so calling either or both is safe.
+## Response shape: { success, data: { status }, message }, where status is one of
+## Constants.FULFILL_PURCHASE_STATUS_*: FULFILLED, ALREADY_FULFILLED (also
+## success), or NOT_FOUND (unknown or refunded: don't grant it).
+func fulfill_purchase(purchase_id: String):
+	if _is_web and WavedashJS:
+		var result = await _invoke_js(WavedashJS.fulfillPurchase(purchase_id))
+		purchase_fulfilled.emit(result)
+		return result
+	else:
+		var result = _web_unsupported("fulfill_purchase")
+		purchase_fulfilled.emit(result)
 		return result
 
 func _validate_item_path(item_path: String, func_name: String) -> bool:
@@ -1147,6 +1185,7 @@ func _start_listener_tracking() -> void:
 		[backend_disconnected, Constants.JS_EVENT_BACKEND_DISCONNECTED],
 		[fullscreen_changed, Constants.JS_EVENT_FULLSCREEN_CHANGED],
 		[entitlements_granted, Constants.JS_EVENT_ENTITLEMENTS_GRANTED],
+		[purchase_completed, Constants.JS_EVENT_PURCHASE_COMPLETED],
 	]
 	_listener_track_timer = Timer.new()
 	_listener_track_timer.wait_time = 5.0
@@ -1261,8 +1300,16 @@ func _dispatch_js_event(args):
 			fullscreen_changed.emit(data)
 		Constants.JS_EVENT_ENTITLEMENTS_GRANTED:
 			var data = JSON.parse_string(payload)
-			_log("Purchase completed: %s" % str(payload))
+			_log("Entitlements granted: %s" % str(payload))
 			entitlements_granted.emit(data)
+		# One per purchase: { purchaseId, contentIdentifier, type, fulfilled,
+		# purchasedAt, receiptJwt }. For a consumable (fulfilled == false), grant
+		# it, then call fulfill_purchase(purchaseId); until then it's redelivered
+		# every launch, so dedupe on purchaseId if you persist grants.
+		Constants.JS_EVENT_PURCHASE_COMPLETED:
+			var data = JSON.parse_string(payload)
+			_log("Purchase completed")
+			purchase_completed.emit(data)
 		_:
 			push_warning("[WavedashSDK] Received unknown event from JS: " + method_name)
 
