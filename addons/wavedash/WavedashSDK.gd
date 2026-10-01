@@ -1308,7 +1308,7 @@ func _dispatch_js_event(args):
 		# every launch, so dedupe on purchaseId if you persist grants.
 		Constants.JS_EVENT_PURCHASE_COMPLETED:
 			var data = JSON.parse_string(payload)
-			_log("Purchase completed: %s" % str(payload))
+			_log("Purchase completed")
 			purchase_completed.emit(data)
 		_:
 			push_warning("[WavedashSDK] Received unknown event from JS: " + method_name)
