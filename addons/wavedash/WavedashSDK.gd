@@ -205,6 +205,11 @@ func _fetch_user() -> Dictionary:
 func get_user() -> Dictionary:
 	return _fetch_user()
 
+func get_user_language() -> String:
+	if _is_web and WavedashJS:
+		return WavedashJS.getUserLanguage()
+	return "en"
+
 func get_user_id() -> String:
 	if _user_id == "":
 		_fetch_user()
