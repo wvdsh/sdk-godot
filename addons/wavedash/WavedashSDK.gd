@@ -208,7 +208,7 @@ func get_user() -> Dictionary:
 func get_user_language() -> String:
 	if _is_web and WavedashJS:
 		return WavedashJS.getUserLanguage()
-	return "en"
+	return Constants.LANGUAGE_CODE_ENGLISH
 
 func get_user_id() -> String:
 	if _user_id == "":
