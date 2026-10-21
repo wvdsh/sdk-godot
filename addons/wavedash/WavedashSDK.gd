@@ -12,6 +12,7 @@ var _is_web : bool = OS.get_name() == Constants.PLATFORM_WEB
 var _cached_user : Dictionary = {}
 var _user_id : String = ""
 var _username : String = ""
+var _user_language : String = ""
 var _entered_tree: bool = false
 
 var _cached_lobby_host_id : String = ""
@@ -200,10 +201,20 @@ func _fetch_user() -> Dictionary:
 		_cached_user = JSON.parse_string(WavedashJS.getUser())
 		_user_id = _cached_user.get("id", "")
 		_username = _cached_user.get("username", "")
+		_user_language = _cached_user.get("language", "")
 	return _cached_user
 
 func get_user() -> Dictionary:
 	return _fetch_user()
+
+## Returns the current user's preferred language code, such as "en" or "pt-BR".
+## Compare it with the Constants.LANGUAGE_CODE_* values.
+func get_user_language() -> String:
+	if not _is_web:
+		return Constants.LANGUAGE_CODE_ENGLISH
+	if _user_language == "":
+		_fetch_user()
+	return _user_language
 
 func get_user_id() -> String:
 	if _user_id == "":
