@@ -205,6 +205,8 @@ func _fetch_user() -> Dictionary:
 func get_user() -> Dictionary:
 	return _fetch_user()
 
+## Returns the current user's preferred language code, such as "en" or "pt-BR".
+## Compare it with the Constants.LANGUAGE_CODE_* values.
 func get_user_language() -> String:
 	if _is_web and WavedashJS:
 		return WavedashJS.getUserLanguage()
